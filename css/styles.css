@@ -1,0 +1,129 @@
+/* ComfortRoute — app-style UI (bottom sheet, high contrast, WCAG 2.1 AA targets). */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #101828; background: #101828;
+}
+#map { position: fixed; inset: 0; z-index: 0; }
+.leaflet-container { font: inherit; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  background: #101828; color: #fff;
+}
+.brand { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.2px; }
+.chip {
+  background: #1f2b45; color: #fff; border-radius: 999px;
+  padding: 6px 14px; font-size: 0.9rem; font-weight: 600; white-space: nowrap;
+}
+
+/* ---------- bottom sheet ---------- */
+#sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001;
+  background: #fff; border-radius: 20px 20px 0 0;
+  box-shadow: 0 -6px 24px rgba(16, 24, 40, 0.35);
+  max-height: 62vh; overflow-y: auto;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+}
+#panel-setup h1 { font-size: 1.35rem; font-weight: 800; }
+.hint { margin: 6px 0 14px; font-size: 0.92rem; line-height: 1.45; color: #344054; }
+
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.start-label { font-size: 0.9rem; font-weight: 600; color: #101828; }
+
+fieldset { border: 0; margin: 0 0 14px; }
+legend { font-size: 0.82rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #475467; margin-bottom: 8px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-btn {
+  font: inherit; font-weight: 700; font-size: 0.95rem;
+  padding: 10px 16px; border-radius: 999px;
+  border: 2px solid #98a2b3; background: #fff; color: #101828;
+  min-height: 44px; cursor: pointer;
+}
+.chip-btn[aria-pressed="true"] { background: #0b3d91; border-color: #0b3d91; color: #fff; }
+.chip-btn:focus-visible { outline: 3px solid #b45309; outline-offset: 2px; }
+
+.slider-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.slider-row label { font-size: 0.9rem; font-weight: 600; }
+.slider-row input[type="range"] { flex: 1; accent-color: #0b3d91; min-height: 44px; }
+
+/* Location search */
+.search-row { display: flex; gap: 8px; }
+.search-row input[type="search"] {
+  flex: 1; min-height: 44px; padding: 8px 12px; font-size: 1rem;
+  border: 2px solid #6b7280; border-radius: 10px; background: #fff; color: #111827;
+}
+.search-row input[type="search"]:focus { outline: 3px solid #ffd54f; border-color: #0b3d91; }
+.results-list {
+  display: flex; flex-direction: column; margin-top: 6px; background: #fff;
+  border: 2px solid #0b3d91; border-radius: 10px; max-height: 220px; overflow-y: auto;
+}
+.search-hit {
+  text-align: left; padding: 12px; min-height: 44px; background: #fff; border: none;
+  border-bottom: 1px solid #e5e7eb; font-size: 0.95rem; color: #111827; cursor: pointer;
+}
+.search-hit:focus { outline: 3px solid #ffd54f; background: #eef4ff; }
+.search-note { padding: 12px; color: #374151; font-size: 0.9rem; }
+.check-row { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 1rem; color: #111827; }
+.check-row input[type="checkbox"] { width: 24px; height: 24px; accent-color: #0b3d91; }
+
+/* Time-of-day controls */
+.time-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.time-row input[type="range"] { flex: 1; accent-color: #0b3d91; min-height: 44px; }
+.time-row output, .slider-row output { font-weight: 700; min-width: 52px; text-align: center; color: #111827; }
+.slider-row output { font-weight: 800; min-width: 56px; text-align: right; }
+
+.btn {
+  font: inherit; font-weight: 800; font-size: 1.05rem;
+  border-radius: 14px; border: 2px solid transparent; cursor: pointer;
+  min-height: 48px; padding: 10px 18px;
+}
+.btn:focus-visible { outline: 3px solid #b45309; outline-offset: 2px; }
+.btn.primary { display: block; width: 100%; background: #0b3d91; color: #fff; }
+.btn.primary:hover { background: #092f6f; }
+.btn.ghost { background: #fff; border-color: #0b3d91; color: #0b3d91; font-size: 0.95rem; min-height: 44px; }
+.btn.ghost:hover { background: #eef4ff; }
+
+#status { margin-top: 10px; font-size: 0.92rem; font-weight: 600; color: #0b3d91; min-height: 1.3em; }
+#status.error { color: #b42318; }
+
+/* ---------- results ---------- */
+.results-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.legend { display: flex; gap: 12px; font-size: 0.82rem; font-weight: 700; color: #344054; }
+.legend .sw { display: inline-block; width: 18px; height: 6px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+.sw.shaded { background: #1565d8; }
+.sw.mixed { background: #6b7280; }
+.sw.sunny { background: #d97400; }
+
+#cards { display: flex; flex-direction: column; gap: 10px; }
+.card {
+  font: inherit; text-align: left; width: 100%; cursor: pointer;
+  border: 2px solid #98a2b3; border-radius: 16px; background: #fff;
+  padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start;
+}
+.card:hover { border-color: #0b3d91; background: #f4f8ff; }
+.card.selected { border-color: #0b3d91; background: #eef4ff; box-shadow: 0 0 0 2px #0b3d91 inset; }
+.card:focus-visible { outline: 3px solid #b45309; outline-offset: 2px; }
+.card .rank {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+  background: #0b3d91; color: #fff; font-weight: 800; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.card .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.9rem; color: #344054; }
+.card .stats strong { width: 100%; font-size: 1.02rem; color: #101828; }
+.card .warn { width: 100%; color: #b42318; font-weight: 800; font-size: 0.9rem; }
+
+.leaflet-control-attribution { font-size: 10px; }
+
+@media (min-width: 640px) {
+  #sheet { left: auto; width: 420px; right: 16px; bottom: 16px; border-radius: 20px; max-height: 78vh; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  #sheet { transition: max-height 0.2s ease; }
+  .card { transition: background 0.15s ease; }
+}

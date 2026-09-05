@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ComfortRoute — Shaded running loops in Brisbane</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="map" aria-label="Map of Brisbane. Tap the map to set your start point."></div>
+
+<header class="topbar">
+  <span class="brand">☀️ ComfortRoute</span>
+  <span id="wx-chip" class="chip" role="status" aria-live="polite">Loading weather…</span>
+</header>
+
+<main id="sheet" aria-label="Route finder">
+  <section id="panel-setup">
+    <h1>Plan your run</h1>
+    <p class="hint">Search or tap to set a <strong>start</strong> and an <strong>end</strong> (or leave it as a loop), pick a distance, and get up to 3 routes ranked by conditions <strong>right now</strong> — shade, heat, hills, traffic signals and how much is on paths &amp; trails.</p>
+
+    <fieldset>
+      <legend>Drop pins on the map</legend>
+      <div class="chips" id="pin-chips" role="group" aria-label="Choose which pin the next map tap drops">
+        <button class="chip-btn" id="pin-start" aria-pressed="true">🟢 Start pin</button>
+        <button class="chip-btn" id="pin-end" aria-pressed="false">🟩 End pin</button>
+      </div>
+      <p class="hint">Tap a pin button, then tap the map to place it — no typing needed.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Start point</legend>
+      <div class="search-row">
+        <input id="start-input" type="search" placeholder="Search a place (e.g. South Bank)…" autocomplete="off" aria-label="Search for a start location in Brisbane">
+        <button id="btn-locate" class="btn ghost" aria-label="Use my current location as the start point">📍</button>
+      </div>
+      <div id="start-results" class="results-list" role="listbox" aria-label="Start location search results" hidden></div>
+      <span id="start-label" class="start-label">Start: South Bank, Brisbane</span>
+    </fieldset>
+
+    <fieldset>
+      <legend>End point</legend>
+      <label class="check-row">
+        <input type="checkbox" id="same-end" checked>
+        <span>Return to start (loop)</span>
+      </label>
+      <div class="search-row" id="end-row" hidden>
+        <input id="end-input" type="search" placeholder="Search an end place…" autocomplete="off" aria-label="Search for an end location in Brisbane">
+      </div>
+      <div id="end-results" class="results-list" role="listbox" aria-label="End location search results" hidden></div>
+      <span id="end-label" class="start-label" hidden></span>
+      <p class="hint">Untick to run point-to-point — set the distance you want and the route will take the long way round through nearby paths to hit it.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Time of day</legend>
+      <div class="slider-row">
+        <input id="time-slider" type="range" min="0" max="23.75" step="0.25" value="12" aria-label="Time of day for shade and UV calculations">
+        <output id="time-out" for="time-slider">12:00</output>
+        <button id="btn-now" class="btn ghost">Now</button>
+      </div>
+      <p class="hint">Shade &amp; UV are computed for this time — slide forward to plan an evening run. You can fine-tune it again on the results screen.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Distance</legend>
+      <div class="chips" id="dist-chips" role="group" aria-label="Distance">
+        <button class="chip-btn" data-km="2" aria-pressed="false">2 km</button>
+        <button class="chip-btn" data-km="3" aria-pressed="true">3 km</button>
+        <button class="chip-btn" data-km="5" aria-pressed="false">5 km</button>
+        <button class="chip-btn" data-km="8" aria-pressed="false">8 km</button>
+        <button class="chip-btn" data-km="10" aria-pressed="false">10 km</button>
+      </div>
+      <div class="slider-row">
+        <label for="dist-slider">Custom:</label>
+        <input id="dist-slider" type="range" min="1" max="15" step="0.5" value="3">
+        <output id="dist-out" for="dist-slider">3 km</output>
+      </div>
+      <p class="hint" id="dist-hint">Your loop will be about this long.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sunlight</legend>
+      <div class="chips" id="sun-chips" role="group" aria-label="Sunlight preference">
+        <button class="chip-btn" data-sun="sunny" aria-pressed="false">☀️ Sunny</button>
+        <button class="chip-btn" data-sun="balanced" aria-pressed="true">⚖️ Balanced</button>
+        <button class="chip-btn" data-sun="shaded" aria-pressed="false">🌳 Shaded</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Hills</legend>
+      <div class="chips" id="hill-chips" role="group" aria-label="Hill preference">
+        <button class="chip-btn" data-hills="avoid" aria-pressed="false">🫁 Avoid</button>
+        <button class="chip-btn" data-hills="balanced" aria-pressed="true">⚖️ Balanced</button>
+        <button class="chip-btn" data-hills="seek" aria-pressed="false">🏔️ Bring them on</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Traffic signals</legend>
+      <div class="chips" id="sig-chips" role="group" aria-label="Minimise traffic signals">
+        <button class="chip-btn" data-sig="on" aria-pressed="true">🚦 Fewest signals</button>
+        <button class="chip-btn" data-sig="off" aria-pressed="false">Doesn't matter</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Water stops</legend>
+      <div class="chips" id="water-chips" role="group" aria-label="Water stops along the route">
+        <button class="chip-btn" data-water="off" aria-pressed="true">Not needed</button>
+        <button class="chip-btn" data-water="on" aria-pressed="false">💧 Need taps en route</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Benches / rest points</legend>
+      <div class="chips" id="seat-chips" role="group" aria-label="Benches along the route">
+        <button class="chip-btn" data-seat="off" aria-pressed="true">Not needed</button>
+        <button class="chip-btn" data-seat="on" aria-pressed="false">🪑 Need benches</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Stairs</legend>
+      <div class="chips" id="stairs-chips" role="group" aria-label="Stairs on the route">
+        <button class="chip-btn" data-stairs="ok" aria-pressed="true">OK</button>
+        <button class="chip-btn" data-stairs="avoid" aria-pressed="false">♿ Avoid stairs</button>
+      </div>
+    </fieldset>
+
+    <button id="btn-find" class="btn primary">Find loop routes</button>
+    <p id="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section id="panel-results" hidden>
+    <div class="results-head">
+      <button id="btn-back" class="btn ghost">← New search</button>
+      <h2 id="results-title">Loop options</h2>
+      <p id="result-status" role="status" aria-live="polite"></p>
+      <div class="legend" aria-hidden="true">
+        <span><span class="sw shaded"></span>Shaded</span>
+        <span><span class="sw mixed"></span>Mixed</span>
+        <span><span class="sw sunny"></span>Sunny</span>
+      </div>
+      <div class="time-row">
+        <label for="time-slider2">⏰ Time</label>
+        <input id="time-slider2" type="range" min="0" max="23.75" step="0.25" value="12" aria-label="Adjust time of day — shade and UV update live">
+        <output id="time-out2" for="time-slider2">12:00</output>
+      </div>
+    </div>
+    <div id="cards" role="list" aria-label="Suggested loop routes"></div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/sun.js"></script>
+<script src="js/data.js"></script>
+<script src="js/apis.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
