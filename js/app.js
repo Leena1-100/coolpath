@@ -975,6 +975,7 @@
 
       $('panel-setup').hidden = true;
       $('panel-results').hidden = false;
+      setPanelState(2); // open the panel fully so results are visible
       renderCards();
       drawRoutes();
       selectLoop(0);
@@ -990,7 +991,94 @@
     }
   });
 
+  /* ================= draggable panel (bottom sheet ↔ side drawer) =================
+     Two layouts chosen by screen size/orientation: bottom sheet slides up/down,
+     side drawer slides left/right. Free dragging while held; on release it snaps
+     smoothly to the nearest of three states: Hidden, Half open, Fully open.
+     Flicks beat proximity, and the handle is keyboard-operable (ARIA slider). */
+  const sheetEl = $('sheet'), handleEl = $('sheet-handle');
+  const STATE_NAMES = ['Hidden', 'Half open', 'Fully open'];
+  let panelMode = null, panelState = 2, panelOffset = 0, dragInfo = null;
+
+  const panelIsSide = () => window.innerWidth >= 900 ||
+    (window.innerWidth > window.innerHeight && window.innerWidth >= 640);
+  const panelLen = () => panelMode === 'side' ? sheetEl.offsetWidth : sheetEl.offsetHeight;
+  const hiddenOffset = () => Math.max(0, panelLen() - 52); // 52px grab strip stays visible
+  const stateOffset = s => s === 0 ? hiddenOffset() : s === 1 ? Math.round(panelLen() * 0.5) : 0;
+
+  function setPanelOffset(px, animate) {
+    panelOffset = px;
+    sheetEl.style.transition = animate ? '' : 'none';
+    sheetEl.style.transform = panelMode === 'side'
+      ? `translateX(${Math.round(px)}px)` : `translateY(${Math.round(px)}px)`;
+    if (!animate) { void sheetEl.offsetHeight; sheetEl.style.transition = ''; } // flush, restore CSS transition
+    handleEl.setAttribute('aria-valuenow', String(panelState));
+    handleEl.setAttribute('aria-valuetext', STATE_NAMES[panelState]);
+  }
+  function setPanelState(s, animate = true) {
+    panelState = Math.max(0, Math.min(2, s));
+    setPanelOffset(stateOffset(panelState), animate);
+  }
+  function applyPanelMode() {
+    const mode = panelIsSide() ? 'side' : 'bottom';
+    if (mode !== panelMode) {
+      panelMode = mode;
+      sheetEl.classList.toggle('mode-side', mode === 'side');
+      sheetEl.classList.toggle('mode-bottom', mode === 'bottom');
+      handleEl.setAttribute('aria-orientation', mode === 'side' ? 'horizontal' : 'vertical');
+    }
+    setPanelOffset(stateOffset(panelState), false);
+  }
+
+  handleEl.addEventListener('pointerdown', e => {
+    dragInfo = {
+      x0: e.clientX, y0: e.clientY, offset0: panelOffset,
+      v: 0, lastP: panelMode === 'side' ? e.clientX : e.clientY, lastT: performance.now()
+    };
+    try { handleEl.setPointerCapture(e.pointerId); } catch { /* no-op on old browsers */ }
+    e.preventDefault();
+  });
+  handleEl.addEventListener('pointermove', e => {
+    if (!dragInfo) return;
+    const d = panelMode === 'side' ? e.clientX - dragInfo.x0 : e.clientY - dragInfo.y0;
+    // Closing (down/right) increases the offset; opening decreases it — same sign both modes.
+    setPanelOffset(Math.max(0, Math.min(hiddenOffset(), dragInfo.offset0 + d)), false);
+    const now = performance.now(), dt = now - dragInfo.lastT;
+    if (dt >= 16) {
+      const p = panelMode === 'side' ? e.clientX : e.clientY;
+      dragInfo.v = (p - dragInfo.lastP) / dt; dragInfo.lastP = p; dragInfo.lastT = now;
+    }
+  });
+  function endPanelDrag() {
+    if (!dragInfo) return;
+    const { v } = dragInfo; dragInfo = null;
+    const offs = [stateOffset(0), stateOffset(1), stateOffset(2)];
+    let best = 0;
+    for (let i = 1; i < 3; i++) if (Math.abs(offs[i] - panelOffset) < Math.abs(offs[best] - panelOffset)) best = i;
+    if (Math.abs(v) > 0.6) best = Math.max(0, Math.min(2, best + (v > 0 ? -1 : 1))); // flick wins over proximity
+    setPanelState(best);
+  }
+  handleEl.addEventListener('pointerup', endPanelDrag);
+  handleEl.addEventListener('pointercancel', endPanelDrag);
+
+  // Keyboard operation of the ARIA slider handle.
+  handleEl.addEventListener('keydown', e => {
+    const closeKey = panelMode === 'side' ? 'ArrowRight' : 'ArrowDown';
+    const openKey = panelMode === 'side' ? 'ArrowLeft' : 'ArrowUp';
+    if (e.key === closeKey) setPanelState(panelState - 1);
+    else if (e.key === openKey) setPanelState(panelState + 1);
+    else if (e.key === 'Home') setPanelState(2);
+    else if (e.key === 'End') setPanelState(0);
+    else return;
+    e.preventDefault();
+  });
+  handleEl.addEventListener('dblclick', () => setPanelState((panelState + 1) % 3));
+
+  window.addEventListener('resize', applyPanelMode);
+  window.addEventListener('orientationchange', applyPanelMode);
+
   /* ================= boot ================= */
+  applyPanelMode(); // panel starts fully open in whichever layout fits the screen
   setStart(DEFAULT_START, DEFAULT_START.label);
   setDist(3);
   syncTimeUI();
