@@ -239,7 +239,7 @@
   /* ================= dropped-pin card (precise coordinates) ================= */
   function showPinCard(lat, lon, role) {
     state.pin = { lat, lon, role };
-    $('pin-card-title').textContent = role === 'end' ? '🟩 End pin dropped' : '🟢 Start pin dropped';
+    $('pin-card-title').textContent = role === 'end' ? 'End pin dropped' : 'Start pin dropped';
     $('pin-coords').textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
     $('pin-card').hidden = false;
   }
@@ -258,14 +258,14 @@
     if (!state.pin) return;
     setStart(state.pin, pinLabel(state.pin));
     state.pin.role = 'start';
-    $('pin-card-title').textContent = '🟢 Start pin dropped';
+    $('pin-card-title').textContent = 'Start pin dropped';
   });
   $('pin-use-end').addEventListener('click', () => {
     if (!state.pin) return;
     if ($('same-end').checked) { $('same-end').checked = false; $('same-end').dispatchEvent(new Event('change')); }
     setEnd(state.pin, pinLabel(state.pin));
     state.pin.role = 'end';
-    $('pin-card-title').textContent = '🟩 End pin dropped';
+    $('pin-card-title').textContent = 'End pin dropped';
   });
   // Clear → remove the pin so a fresh start or end pin can be placed.
   $('pin-clear').addEventListener('click', () => {
@@ -275,7 +275,7 @@
     $('pin-card').hidden = true;
     if (role === 'end') clearEnd();
     else setStart(DEFAULT_START, DEFAULT_START.label);
-    setStatus('Pin cleared — choose 🟢 Start pin or 🟩 End pin, then tap the map to place a new one.');
+    setStatus('Pin cleared — choose a pin type, then tap the map to place a new one.');
   });
 
   $('btn-locate').addEventListener('click', () => {
@@ -308,6 +308,18 @@
     state.distKm = Geo.clamp(km, 0.5, 50);
   }
   distInput.addEventListener('input', setDistText);
+
+  // Progressive disclosure: "Show details" / "Hide details" toggle.
+  const detailsBtn = $('btn-details');
+  const detailsBody = $('details-body');
+  const detailsLabel = $('details-label');
+  function setDetails(open) {
+    detailsBtn.setAttribute('aria-expanded', String(open));
+    detailsBody.classList.toggle('open', open);
+    detailsLabel.textContent = open ? 'Hide details' : 'Show details';
+  }
+  detailsBtn.addEventListener('click', () => setDetails(detailsBtn.getAttribute('aria-expanded') !== 'true'));
+  setDetails(false); // start collapsed for a clean, compact layout
 
   // Preference chips: one bound group per state key; picks re-rank instantly
   // when conditions are already loaded.
@@ -772,21 +784,22 @@
             (loop.indoor ? ' Warning: passes through buildings.' : '')
           : 'Measuring shade, hills and traffic signals.'));
       btn.innerHTML =
-        `<span class="rank">#${i + 1}</span>
+        `<span class="rank">${i + 1}</span>
          <span class="stats">
            <strong>${loop.distKm.toFixed(1)} km · ≈${mins} min run</strong>
-           <span>🌳 ${nz(loop.shadePct, v => Math.round(v * 100) + '% shaded')}</span>
-           <span>🌿 ${nz(loop.trailPct, v => Math.round(v * 100) + '% trails')}</span>
-           <span>☀️ ${nz(loop.uvEff, v => 'UV ' + v.toFixed(1))}</span>
-           <span>⛰️ ${nz(loop.maxGrade, v => Math.round(v) + '% max · ' + Math.round(loop.climb) + ' m up')}</span>
-           <span>🚦 ${nz(loop.signals, v => v + ' signals')}</span>
-           <span>💧 ${nz(loop.waterCount, v => v + ' water' + (state.waterReq && v === 0 ? ' ⚠' : ''))}</span>
-           <span>🪑 ${nz(loop.benchCount, v => v + ' benches' + (state.seatsReq && v === 0 ? ' ⚠' : ''))}</span>
+           <span class="metric"><span class="mt-label">Shade</span><span class="mt-value">${nz(loop.shadePct, v => Math.round(v * 100) + '%')}</span></span>
+           <span class="metric"><span class="mt-label">Trails</span><span class="mt-value">${nz(loop.trailPct, v => Math.round(v * 100) + '%')}</span></span>
+           <span class="metric"><span class="mt-label">UV</span><span class="mt-value">${nz(loop.uvEff, v => v.toFixed(1))}</span></span>
+           <span class="metric"><span class="mt-label">Hills</span><span class="mt-value">${nz(loop.maxGrade, v => Math.round(v) + '%')}</span></span>
+           <span class="metric"><span class="mt-label">Up</span><span class="mt-value">${nz(loop.climb, v => Math.round(v) + ' m')}</span></span>
+           <span class="metric"><span class="mt-label">Signals</span><span class="mt-value">${nz(loop.signals, v => v)}</span></span>
+           <span class="metric"><span class="mt-label">Water</span><span class="mt-value">${nz(loop.waterCount, v => v)}</span></span>
+           <span class="metric"><span class="mt-label">Benches</span><span class="mt-value">${nz(loop.benchCount, v => v)}</span></span>
          </span>` +
-        (loop.indoor ? '<span class="warn">⚠ Passes through buildings</span>' : '') +
-        (measured && state.waterReq && !loop.waterCount ? '<span class="warn">⚠ No water taps en route</span>' : '') +
-        (measured && state.seatsReq && !loop.benchCount ? '<span class="warn">⚠ No benches en route</span>' : '') +
-        (measured && state.avoidStairs && loop.stepsHit ? '<span class="warn">⚠ Stairs on route</span>' : '');
+        (loop.indoor ? '<span class="warn">Passes through buildings</span>' : '') +
+        (measured && state.waterReq && !loop.waterCount ? '<span class="warn">No water taps en route</span>' : '') +
+        (measured && state.seatsReq && !loop.benchCount ? '<span class="warn">No benches en route</span>' : '') +
+        (measured && state.avoidStairs && loop.stepsHit ? '<span class="warn">Stairs on route</span>' : '');
       btn.addEventListener('click', () => selectLoop(i));
       box.appendChild(btn);
     });
@@ -921,11 +934,11 @@
       if (state.waterReq && !state.loops.some(l => l.waterCount > 0)) {
         setStatus('No water taps found near these loops — try a longer distance or move the start point closer to parks or the river.', true);
       } else if (state.waterReq && !state.loops[0].waterCount) {
-        setStatus('None of the top routes pass a water tap — check the ⚠ badge or search again for more options.', true);
+        setStatus('None of the top routes pass a water tap — check the route badges or search again for more options.', true);
       } else if (state.seatsReq && !state.loops.some(l => l.benchCount > 0)) {
         setStatus('No benches found near these loops — try a longer distance or a riverside/park start point.', true);
       } else if (state.seatsReq && !state.loops[0].benchCount) {
-        setStatus('None of the top routes pass a bench — check the ⚠ badge or search again.', true);
+        setStatus('None of the top routes pass a bench — check the route badges or search again.', true);
       } else if (state.avoidStairs && state.loops.every(l => l.stepsHit)) {
         setStatus('All of these loops include stairs — try moving the start point or a different distance.', true);
       } else {

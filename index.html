@@ -11,27 +11,45 @@
 <div id="map" aria-label="Map of Brisbane. Tap the map to set your start point."></div>
 
 <header class="topbar">
-  <span class="brand">☀️ ComfortRoute</span>
+  <span class="brand">ComfortRoute</span>
   <span id="wx-chip" class="chip" role="status" aria-live="polite">Loading weather…</span>
 </header>
 
 <main id="sheet" class="mode-bottom" aria-label="Route finder">
   <div id="sheet-handle" role="slider" tabindex="0" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="2" aria-valuenow="2" aria-valuetext="Fully open" aria-label="Panel position — drag the bar, use arrow keys, or double-tap to cycle: Hidden, Half open, Fully open"><span class="grabber" aria-hidden="true"></span></div>
   <section id="panel-setup">
-    <h1>Plan your run</h1>
-    <p class="hint">Search or tap to set a <strong>start</strong> and an <strong>end</strong> (or leave it as a loop), type an optional distance, and get up to 3 routes ranked by conditions <strong>right now</strong> — shade, heat, hills, traffic signals and how much is on paths &amp; trails.</p>
+    <header class="panel-head">
+      <h1>Plan your run</h1>
+      <button id="btn-details" class="details-toggle" type="button" aria-expanded="false" aria-controls="details-body">
+        <span id="details-label">Show details</span>
+        <svg class="chevron" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none">
+          <path d="M5 7.5 10 12.5 15 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </header>
+
+    <div id="details-body" class="details-body">
+      <div class="details-inner">
+        <p class="hint">Search or tap to set a <strong>start</strong> and an <strong>end</strong> (or leave it as a loop), type an optional distance, and get up to 3 routes ranked by conditions <strong>right now</strong> — shade, heat, hills, traffic signals and how much is on paths &amp; trails.</p>
+        <ul class="details-list">
+          <li>Choose a pin button, then tap the map to drop a pin at that exact spot.</li>
+          <li>Untick "Return to start" to run point-to-point; the route takes the long way round to hit your distance.</li>
+          <li>Slide the time forward to plan shade and UV for later in the day, then fine-tune it on the results screen.</li>
+          <li>Distance is optional — leave it blank for no target length.</li>
+        </ul>
+      </div>
+    </div>
 
     <fieldset>
       <legend>Drop pins on the map</legend>
       <div class="chips" id="pin-chips" role="group" aria-label="Choose which pin the next map tap drops">
-        <button class="chip-btn" id="pin-start" aria-pressed="true">🟢 Start pin</button>
-        <button class="chip-btn" id="pin-end" aria-pressed="false">🟩 End pin</button>
+        <button class="chip-btn" id="pin-start" aria-pressed="true">Start pin</button>
+        <button class="chip-btn" id="pin-end" aria-pressed="false">End pin</button>
       </div>
-      <p class="hint">Tap a pin button, then tap the map to drop it at that exact spot — no typing needed.</p>
       <div id="pin-card" class="pin-card" role="status" aria-live="polite" hidden>
         <div class="pin-card-head">
-          <strong id="pin-card-title">🟢 Start pin dropped</strong>
-          <button id="pin-clear" class="btn ghost btn-sm" aria-label="Clear the dropped pin">✕ Clear</button>
+          <strong id="pin-card-title">Start pin dropped</strong>
+          <button id="pin-clear" class="btn ghost btn-sm" aria-label="Clear the dropped pin">Clear</button>
         </div>
         <code id="pin-coords" class="pin-coords" aria-label="Dropped pin coordinates"></code>
         <div class="pin-card-actions">
@@ -45,7 +63,12 @@
       <legend>Start point</legend>
       <div class="search-row">
         <input id="start-input" type="search" placeholder="Search a place (e.g. South Bank)…" autocomplete="off" aria-label="Search for a start location in Brisbane">
-        <button id="btn-locate" class="btn ghost" aria-label="Use my current location as the start point">📍</button>
+        <button id="btn-locate" class="btn icon-btn" aria-label="Use my current location as the start point">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 21s-7-5.2-7-11a7 7 0 1 1 14 0c0 5.8-7 11-7 11Z"/>
+            <circle cx="12" cy="10" r="2.5"/>
+          </svg>
+        </button>
       </div>
       <div id="start-results" class="results-list" role="listbox" aria-label="Start location search results" hidden></div>
       <span id="start-label" class="start-label">Start: South Bank, Brisbane</span>
@@ -62,7 +85,6 @@
       </div>
       <div id="end-results" class="results-list" role="listbox" aria-label="End location search results" hidden></div>
       <span id="end-label" class="start-label" hidden></span>
-      <p class="hint">Untick to run point-to-point — set the distance you want and the route will take the long way round through nearby paths to hit it.</p>
     </fieldset>
 
     <fieldset>
@@ -72,7 +94,6 @@
         <output id="time-out" for="time-slider">12:00</output>
         <button id="btn-now" class="btn ghost">Now</button>
       </div>
-      <p class="hint">Shade &amp; UV are computed for this time — slide forward to plan an evening run. You can fine-tune it again on the results screen.</p>
     </fieldset>
 
     <fieldset>
@@ -80,31 +101,30 @@
       <div class="search-row">
         <input id="dist-input" type="text" inputmode="decimal" autocomplete="off" placeholder="Optional — e.g. 5 or 4.5 km" aria-label="Estimated distance in kilometres, optional">
       </div>
-      <p class="hint" id="dist-hint">Type your own estimated distance, e.g. 5 or 4.5 km. Leave it blank and we'll just find you a good loop — no target length.</p>
     </fieldset>
 
     <fieldset>
       <legend>Sunlight</legend>
       <div class="chips" id="sun-chips" role="group" aria-label="Sunlight preference">
-        <button class="chip-btn" data-sun="sunny" aria-pressed="false">☀️ Sunny</button>
-        <button class="chip-btn" data-sun="balanced" aria-pressed="true">⚖️ Balanced</button>
-        <button class="chip-btn" data-sun="shaded" aria-pressed="false">🌳 Shaded</button>
+        <button class="chip-btn" data-sun="sunny" aria-pressed="false">Sunny</button>
+        <button class="chip-btn" data-sun="balanced" aria-pressed="true">Balanced</button>
+        <button class="chip-btn" data-sun="shaded" aria-pressed="false">Shaded</button>
       </div>
     </fieldset>
 
     <fieldset>
       <legend>Hills</legend>
       <div class="chips" id="hill-chips" role="group" aria-label="Hill preference">
-        <button class="chip-btn" data-hills="avoid" aria-pressed="false">🫁 Avoid</button>
-        <button class="chip-btn" data-hills="balanced" aria-pressed="true">⚖️ Balanced</button>
-        <button class="chip-btn" data-hills="seek" aria-pressed="false">🏔️ Bring them on</button>
+        <button class="chip-btn" data-hills="avoid" aria-pressed="false">Avoid</button>
+        <button class="chip-btn" data-hills="balanced" aria-pressed="true">Balanced</button>
+        <button class="chip-btn" data-hills="seek" aria-pressed="false">Bring them on</button>
       </div>
     </fieldset>
 
     <fieldset>
       <legend>Traffic signals</legend>
       <div class="chips" id="sig-chips" role="group" aria-label="Minimise traffic signals">
-        <button class="chip-btn" data-sig="on" aria-pressed="true">🚦 Fewest signals</button>
+        <button class="chip-btn" data-sig="on" aria-pressed="true">Fewest signals</button>
         <button class="chip-btn" data-sig="off" aria-pressed="false">Doesn't matter</button>
       </div>
     </fieldset>
@@ -113,7 +133,7 @@
       <legend>Water stops</legend>
       <div class="chips" id="water-chips" role="group" aria-label="Water stops along the route">
         <button class="chip-btn" data-water="off" aria-pressed="true">Not needed</button>
-        <button class="chip-btn" data-water="on" aria-pressed="false">💧 Need taps en route</button>
+        <button class="chip-btn" data-water="on" aria-pressed="false">Need taps en route</button>
       </div>
     </fieldset>
 
@@ -121,7 +141,7 @@
       <legend>Benches / rest points</legend>
       <div class="chips" id="seat-chips" role="group" aria-label="Benches along the route">
         <button class="chip-btn" data-seat="off" aria-pressed="true">Not needed</button>
-        <button class="chip-btn" data-seat="on" aria-pressed="false">🪑 Need benches</button>
+        <button class="chip-btn" data-seat="on" aria-pressed="false">Need benches</button>
       </div>
     </fieldset>
 
@@ -129,7 +149,7 @@
       <legend>Stairs</legend>
       <div class="chips" id="stairs-chips" role="group" aria-label="Stairs on the route">
         <button class="chip-btn" data-stairs="ok" aria-pressed="true">OK</button>
-        <button class="chip-btn" data-stairs="avoid" aria-pressed="false">♿ Avoid stairs</button>
+        <button class="chip-btn" data-stairs="avoid" aria-pressed="false">Avoid stairs</button>
       </div>
     </fieldset>
 
@@ -139,16 +159,25 @@
 
   <section id="panel-results" hidden>
     <div class="results-head">
-      <button id="btn-back" class="btn ghost">← New search</button>
-      <h2 id="results-title">Loop options</h2>
-      <p id="result-status" role="status" aria-live="polite"></p>
+      <div class="head-row">
+        <button id="btn-back" class="btn ghost back" aria-label="Start a new search">
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13 5 8 10l5 5"/>
+          </svg>
+          New search
+        </button>
+        <h2 id="results-title">Loop options</h2>
+      </div>
+      <div id="result-status-wrap">
+        <p id="result-status" role="status" aria-live="polite"></p>
+      </div>
       <div class="legend" aria-hidden="true">
         <span><span class="sw shaded"></span>Shaded</span>
         <span><span class="sw mixed"></span>Mixed</span>
         <span><span class="sw sunny"></span>Sunny</span>
       </div>
       <div class="time-row">
-        <label for="time-slider2">⏰ Time</label>
+        <label for="time-slider2">Time</label>
         <input id="time-slider2" type="range" min="0" max="23.75" step="0.25" value="12" aria-label="Adjust time of day — shade and UV update live">
         <output id="time-out2" for="time-slider2">12:00</output>
       </div>
