@@ -198,6 +198,18 @@
         <output id="time-out2" for="time-slider2">12:00</output>
       </div>
     </div>
+    <section id="profile" aria-label="Route profile" hidden>
+      <div class="profile-head">
+        <strong>Route profile — route <span id="profile-num">1</span></strong>
+        <div id="profile-tabs" role="group" aria-label="Choose profile metric">
+          <button type="button" class="chip-btn" data-metric="shade" aria-pressed="true">Shade</button>
+          <button type="button" class="chip-btn" data-metric="uv" aria-pressed="false">UV</button>
+          <button type="button" class="chip-btn" data-metric="hills" aria-pressed="false">Hills</button>
+        </div>
+      </div>
+      <div id="profile-chart" role="img" aria-label="Metric along the route distance"></div>
+      <p class="profile-note">Red ticks on the baseline are traffic signals — spots you're likely to stop.</p>
+    </section>
     <section id="recommendation" aria-label="Safety recommendation" hidden>
       <div id="rec-banner" class="rec-banner" role="status" aria-live="polite">
         <span id="rec-badge" class="rec-badge">—</span>

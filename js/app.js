@@ -180,6 +180,7 @@
       state.selected = state.loops.indexOf(prev);
       renderCards();
       drawRoutes();
+      renderProfile();
       refreshEnv(liveCtx.uvData);
       renderRecommendation();
     }
@@ -775,8 +776,19 @@
     loop.uvEff = uv == null ? null : Sun.effectiveUV(uv, loop.shadePct, sun.altitude);
   }
   function applySignals(loop, signals) {
-    loop.signals = signals.filter(sig => Geo.pointToLineDist(sig, loop.pts) < 30).length;
+    const hits = signals.filter(sig => Geo.pointToLineDist(sig, loop.pts) < 30);
+    loop.signals = hits.length;
     loop.signalsPerKm = loop.signals / (loop.dist / 1000);
+    // Distance-along-route of each signal, for the profile chart (stop points).
+    const samples = getSamples(loop);
+    loop.signalDs = hits.map(sig => {
+      let best = Infinity, bestD = 0;
+      for (const s of samples) {
+        const d = Geo.haversine(s, sig);
+        if (d < best) { best = d; bestD = s.d; }
+      }
+      return bestD;
+    }).sort((a, b) => a - b);
   }
   function applyIndoor(loop, indoor) {
     loop.indoor = indoor.some(w => {
@@ -885,6 +897,8 @@
     loop.meanGrade = 0; loop.maxGrade = 0; loop.climb = 0;
     try {
       const elevs = await API.elevations(ePts);
+      // Keep the series for the route-profile chart (distance + elevation).
+      loop.elevSeries = ePts.map((p, j) => ({ d: p.d, elev: elevs[j] }));
       let climb = 0, worst = 0, sum = 0, cnt = 0;
       for (let i = stride; i < samples.length; i += stride) {
         const j = Math.min(elevs.length - 1, Math.round(i / stride));
@@ -986,6 +1000,7 @@
   function selectLoop(i, fit = true) {
     state.selected = i;
     drawRoutes();
+    renderProfile();
     renderRecommendation(); // risk banner follows the selected route
     if (!fit) return;
     const loop = state.loops[i];
@@ -995,6 +1010,102 @@
       c.setAttribute('aria-pressed', String(k === i));
     });
   }
+  /* ================= route profile chart ================= */
+  let profileMetric = 'shade';
+  const PROFILE_COLORS = { shade: '#1565d8', uv: '#d97400', hills: '#7c3aed' };
+  document.querySelectorAll('#profile-tabs .chip-btn').forEach(b =>
+    b.addEventListener('click', () => {
+      profileMetric = b.dataset.metric;
+      document.querySelectorAll('#profile-tabs .chip-btn').forEach(x =>
+        x.setAttribute('aria-pressed', String(x === b)));
+      renderProfile();
+    }));
+
+  function renderProfile() {
+    const sec = $('profile'), box = $('profile-chart');
+    if (!sec) return;
+    const loop = state.loops[state.selected];
+    if (!loop) { sec.hidden = true; return; }
+    sec.hidden = false;
+    $('profile-num').textContent = String(state.selected + 1);
+
+    // Ambient UV for the selected hour (same fallbacks as the safety panel).
+    const sun = Sun.position(activeDate(), state.start.lat, state.start.lon);
+    let uvAmbient = null;
+    if (state.env && state.env.uv != null) uvAmbient = state.env.uv;
+    else if (liveCtx && liveCtx.uvData) uvAmbient = API.uvAt(liveCtx.uvData, activeHour()).uv;
+
+    let pts = null, fmt = v => v, yMax = 1;
+    const color = PROFILE_COLORS[profileMetric];
+    if (profileMetric === 'shade') {
+      if (loop.samples) {
+        pts = loop.samples.map(s => ({ d: s.d, v: s.shade }));
+        yMax = 1;
+        fmt = v => Math.round(v * 100) + '% shaded';
+      }
+    } else if (profileMetric === 'uv') {
+      if (loop.samples && uvAmbient != null) {
+        pts = loop.samples.map(s => ({ d: s.d, v: Sun.effectiveUV(uvAmbient, s.shade, sun.altitude) }));
+        yMax = Math.max(2, uvAmbient);
+        fmt = v => 'UV ' + v.toFixed(1);
+      }
+    } else if (loop.elevSeries && loop.elevSeries.length >= 2) {
+      // Steepness: absolute grade (%) between consecutive elevation points.
+      const es = loop.elevSeries;
+      pts = [];
+      for (let j = 1; j < es.length; j++) {
+        const dx = es[j].d - es[j - 1].d;
+        if (dx > 0) pts.push({ d: (es[j].d + es[j - 1].d) / 2, v: Math.abs(es[j].elev - es[j - 1].elev) / dx * 100 });
+      }
+      yMax = Math.max(8, ...pts.map(p => p.v));
+      fmt = v => Math.round(v) + '% grade';
+    }
+
+    if (!pts || !pts.length) {
+      box.innerHTML = `<div class="profile-empty"><span class="spinner" role="img" aria-label="Loading"></span> Measuring ${profileMetric === 'hills' ? 'hills' : profileMetric}…</div>`;
+      box.onpointermove = null;
+      box.onpointerleave = null;
+      return;
+    }
+
+    const W = 600, H = 150, PAD_L = 6, PAD_R = 6, PAD_T = 10, PAD_B = 22;
+    const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
+    const x = d => PAD_L + (d / loop.dist) * iw;
+    const y = v => PAD_T + ih - Math.min(1, v / yMax) * ih;
+    // Decimate for a compact path; always keep the final sample.
+    let line = '';
+    const step = Math.max(1, Math.floor(pts.length / 300));
+    for (let i = 0; i < pts.length; i += step)
+      line += (line ? ' L' : 'M') + x(pts[i].d).toFixed(1) + ',' + y(pts[i].v).toFixed(1);
+    line += ' L' + x(pts[pts.length - 1].d).toFixed(1) + ',' + y(pts[pts.length - 1].v).toFixed(1);
+    const area = line + ` L${(PAD_L + iw).toFixed(1)},${(PAD_T + ih).toFixed(1)} L${PAD_L},${(PAD_T + ih).toFixed(1)} Z`;
+    const ticks = (loop.signalDs || []).map(d =>
+      `<line x1="${x(d).toFixed(1)}" y1="${(PAD_T + ih).toFixed(1)}" x2="${x(d).toFixed(1)}" y2="${(PAD_T + ih - 13).toFixed(1)}" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round"><title>Traffic signal at ${(d / 1000).toFixed(2)} km</title></line>`).join('');
+    const midKm = pts[Math.floor(pts.length / 2)].d;
+    box.innerHTML =
+      `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+         <path d="${area}" fill="${color}" opacity="0.16"/>
+         <path d="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+         ${ticks}
+         <line x1="${PAD_L}" y1="${(PAD_T + ih).toFixed(1)}" x2="${(PAD_L + iw).toFixed(1)}" y2="${(PAD_T + ih).toFixed(1)}" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+       </svg>
+       <div class="profile-axis" aria-hidden="true"><span>0 km</span><span>${(midKm / 1000).toFixed(1)} km</span><span>${(loop.dist / 1000).toFixed(1)} km</span></div>
+       <div class="profile-readout" hidden></div>`;
+
+    // Drag/hover readout: shows the metric value at a point along the route.
+    const readout = box.querySelector('.profile-readout');
+    box.onpointerleave = () => { readout.hidden = true; };
+    box.onpointermove = e => {
+      const r = box.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      const d = frac * loop.dist;
+      let best = pts[0];
+      for (const p of pts) if (Math.abs(p.d - d) < Math.abs(best.d - d)) best = p;
+      readout.hidden = false;
+      readout.textContent = `${(best.d / 1000).toFixed(2)} km — ${fmt(best.v)}`;
+    };
+  }
+
   function renderCards() {
     const box = $('cards');
     box.innerHTML = '';
@@ -1055,6 +1166,8 @@
     loop.stepsHit = null;
     loop.trailPct = null;
     loop.busyPct = 0;
+    loop.elevSeries = null;
+    loop.signalDs = [];
     loop.maxGrade = null;
     loop.climb = null;
     loop.indoor = false;
@@ -1114,6 +1227,7 @@
       state.selected = state.loops.indexOf(prev);
       renderCards();
       drawRoutes();
+      renderProfile();
       renderRecommendation(); // factors/UV change as data streams in
       return true;
     };
