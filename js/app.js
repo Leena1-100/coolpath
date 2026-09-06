@@ -38,6 +38,7 @@
     endMarker: null,
     routeTarget: null,
     pinMode: 'start',
+    pin: null,
     hour: null,
     bridgeWays: []
   };
@@ -118,15 +119,25 @@
   });
 
   /* ================= start point ================= */
+  // Accept Leaflet latlng (lat/lng), geolocation coords (latitude/longitude)
+  // or plain {lat, lon} — mixing these up is what broke map-tap pins before.
+  function normPt(p) {
+    return { lat: p.lat ?? p.latitude, lon: p.lon ?? p.lng ?? p.longitude };
+  }
+  // Custom teardrop map pin, anchored at its tip so it marks the exact click point.
+  function pinIcon(color, title) {
+    return L.divIcon({
+      className: '',
+      html: `<svg width="30" height="41" viewBox="0 0 30 41" role="img" aria-label="${title}"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.6 15 26 15 26s15-15.4 15-26C30 6.7 23.3 0 15 0z" fill="${color}" stroke="#fff" stroke-width="2"/><circle cx="15" cy="15" r="5.5" fill="#fff"/></svg>`,
+      iconSize: [30, 41], iconAnchor: [15, 39], popupAnchor: [0, -38]
+    });
+  }
   function setStart(p, label) {
-    state.start = { lat: p.lat, lon: p.lon, label };
+    const q = normPt(p);
+    state.start = { lat: q.lat, lon: q.lon, label };
     if (state.startMarker) state.startMarker.remove();
-    state.startMarker = L.marker([p.lat, p.lon], {
-      icon: L.divIcon({
-        className: '',
-        html: '<div style="width:22px;height:22px;border-radius:50%;background:#0b3d91;border:3px solid #fff;box-shadow:0 0 0 2px #0b3d91"></div>',
-        iconSize: [22, 22], iconAnchor: [11, 11]
-      }),
+    state.startMarker = L.marker([q.lat, q.lon], {
+      icon: pinIcon('#0b3d91', 'Start point'),
       title: 'Start point', alt: 'Start point'
     }).addTo(map);
     $('start-label').textContent = 'Start: ' + label;
@@ -135,14 +146,11 @@
 
   /* ================= end point (point-to-point mode) ================= */
   function setEnd(p, label) {
-    state.end = { lat: p.lat, lon: p.lon, label };
+    const q = normPt(p);
+    state.end = { lat: q.lat, lon: q.lon, label };
     if (state.endMarker) state.endMarker.remove();
-    state.endMarker = L.marker([p.lat, p.lon], {
-      icon: L.divIcon({
-        className: '',
-        html: '<div style="width:20px;height:20px;background:#0a7d33;border:3px solid #fff;box-shadow:0 0 0 2px #0a7d33;transform:rotate(45deg)"></div>',
-        iconSize: [20, 20], iconAnchor: [10, 10]
-      }),
+    state.endMarker = L.marker([q.lat, q.lon], {
+      icon: pinIcon('#0a7d33', 'End point'),
       title: 'End point', alt: 'End point'
     }).addTo(map);
     const el = $('end-label');
@@ -153,6 +161,7 @@
     state.end = null;
     if (state.endMarker) { state.endMarker.remove(); state.endMarker = null; }
     $('end-label').hidden = true;
+    if (state.pin && state.pin.role === 'end') { state.pin = null; $('pin-card').hidden = true; }
   }
   $('same-end').addEventListener('change', e => {
     if (e.target.checked) {
@@ -226,11 +235,46 @@
   $('pin-start').addEventListener('click', () => setPinMode('start'));
   $('pin-end').addEventListener('click', () => setPinMode('end'));
 
+  /* ================= dropped-pin card (precise coordinates) ================= */
+  function showPinCard(lat, lon, role) {
+    state.pin = { lat, lon, role };
+    $('pin-card-title').textContent = role === 'end' ? '🟩 End pin dropped' : '🟢 Start pin dropped';
+    $('pin-coords').textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    $('pin-card').hidden = false;
+  }
+  const pinLabel = p => `pin ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+
   map.on('click', e => {
     if (state.busy || !$('panel-setup').offsetParent) return; // ignore in results view
-    const label = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
-    if (state.pinMode === 'end') setEnd(e.latlng, label); // end pin mode
-    else setStart(e.latlng, label);
+    const lat = e.latlng.lat, lon = e.latlng.lng;
+    const label = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    if (state.pinMode === 'end') { setEnd(e.latlng, label); showPinCard(lat, lon, 'end'); }
+    else { setStart(e.latlng, label); showPinCard(lat, lon, 'start'); }
+  });
+
+  // Reassign the dropped pin without tapping the map again.
+  $('pin-use-start').addEventListener('click', () => {
+    if (!state.pin) return;
+    setStart(state.pin, pinLabel(state.pin));
+    state.pin.role = 'start';
+    $('pin-card-title').textContent = '🟢 Start pin dropped';
+  });
+  $('pin-use-end').addEventListener('click', () => {
+    if (!state.pin) return;
+    if ($('same-end').checked) { $('same-end').checked = false; $('same-end').dispatchEvent(new Event('change')); }
+    setEnd(state.pin, pinLabel(state.pin));
+    state.pin.role = 'end';
+    $('pin-card-title').textContent = '🟩 End pin dropped';
+  });
+  // Clear → remove the pin so a fresh start or end pin can be placed.
+  $('pin-clear').addEventListener('click', () => {
+    if (!state.pin) return;
+    const role = state.pin.role;
+    state.pin = null;
+    $('pin-card').hidden = true;
+    if (role === 'end') clearEnd();
+    else setStart(DEFAULT_START, DEFAULT_START.label);
+    setStatus('Pin cleared — choose 🟢 Start pin or 🟩 End pin, then tap the map to place a new one.');
   });
 
   $('btn-locate').addEventListener('click', () => {

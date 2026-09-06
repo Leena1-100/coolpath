@@ -52,6 +52,14 @@ legend { font-size: 0.82rem; font-weight: 800; text-transform: uppercase; letter
 .slider-row label { font-size: 0.9rem; font-weight: 600; }
 .slider-row input[type="range"] { flex: 1; accent-color: #0b3d91; min-height: 44px; }
 
+/* dropped-pin card */
+.pin-card { margin-top: 10px; padding: 12px; border: 2px solid #0b3d91; border-radius: 12px; background: #f2f6fc; }
+.pin-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pin-card-head strong { font-size: 1rem; }
+.pin-coords { display: block; margin: 8px 0; font-size: 1.05rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; color: #10265c; }
+.pin-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-sm { min-height: 44px; padding: 8px 14px; font-size: 0.95rem; }
+
 /* Location search */
 .search-row { display: flex; gap: 8px; }
 .search-row input[type="search"] {

@@ -26,7 +26,18 @@
         <button class="chip-btn" id="pin-start" aria-pressed="true">🟢 Start pin</button>
         <button class="chip-btn" id="pin-end" aria-pressed="false">🟩 End pin</button>
       </div>
-      <p class="hint">Tap a pin button, then tap the map to place it — no typing needed.</p>
+      <p class="hint">Tap a pin button, then tap the map to drop it at that exact spot — no typing needed.</p>
+      <div id="pin-card" class="pin-card" role="status" aria-live="polite" hidden>
+        <div class="pin-card-head">
+          <strong id="pin-card-title">🟢 Start pin dropped</strong>
+          <button id="pin-clear" class="btn ghost btn-sm" aria-label="Clear the dropped pin">✕ Clear</button>
+        </div>
+        <code id="pin-coords" class="pin-coords" aria-label="Dropped pin coordinates"></code>
+        <div class="pin-card-actions">
+          <button id="pin-use-start" class="btn ghost btn-sm">Use as Start</button>
+          <button id="pin-use-end" class="btn ghost btn-sm">Use as End</button>
+        </div>
+      </div>
     </fieldset>
 
     <fieldset>
