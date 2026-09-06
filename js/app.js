@@ -20,6 +20,7 @@
   const state = {
     start: { ...DEFAULT_START },
     distKm: 3,
+    distSet: false, // true only when the user typed a distance (else no target length)
     sun: 'balanced',
     hills: 'balanced',
     sig: true,
@@ -52,8 +53,8 @@
   };
 
   /* ================= weather chip ================= */
-  function fmtClock(d) {
-    let h = d.getHours(), m = d.getMinutes();
+  function fmtClock(min) {
+    let h = Math.floor(min / 60), m = Math.round(min % 60);
     const ap = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
     return `${h}:${String(m).padStart(2, '0')} ${ap}`;
@@ -292,16 +293,21 @@
   });
 
   /* ================= inputs ================= */
-  function setDist(km) {
-    state.distKm = km;
-    $('dist-out').textContent = km + ' km';
-    $('dist-slider').value = km;
-    document.querySelectorAll('#dist-chips .chip-btn').forEach(b =>
-      b.setAttribute('aria-pressed', String(parseFloat(b.dataset.km) === km)));
+  // Distance is optional, free-text (km). Leave blank or invalid → no target
+  // length; the app just builds a good mix of loops and ranks on conditions.
+  const distInput = $('dist-input');
+  function setDistText() {
+    const raw = distInput.value.trim().replace(',', '.');
+    const km = parseFloat(raw);
+    if (!raw || !isFinite(km) || km <= 0) {
+      state.distSet = false;
+      state.distKm = 3; // default build size for loop sizing when no target given
+      return;
+    }
+    state.distSet = true;
+    state.distKm = Geo.clamp(km, 0.5, 50);
   }
-  document.querySelectorAll('#dist-chips .chip-btn').forEach(b =>
-    b.addEventListener('click', () => setDist(parseFloat(b.dataset.km))));
-  $('dist-slider').addEventListener('input', e => setDist(parseFloat(e.target.value)));
+  distInput.addEventListener('input', setDistText);
 
   // Preference chips: one bound group per state key; picks re-rank instantly
   // when conditions are already loaded.
@@ -393,9 +399,12 @@
   }
 
   async function generateLoops(target) {
-    // One parallel batch of candidates → routes on screen in ~1 s.
+    // When the user didn't set a target distance, sample a spread of loop sizes
+    // so they get a genuine mix of lengths instead of everything pinned near one.
+    const bases = state.distSet ? [target] : [1500, 3000, 5000, 7500];
     const collect = async n => {
-      const batch = Array.from({ length: n }, () => makeCandidate(target));
+      const batch = Array.from({ length: n }, () =>
+        makeCandidate(bases[Math.floor(Math.random() * bases.length)]));
       const results = await Promise.allSettled(batch.map(b => API.routeVia(b)));
       return results.filter(r => r.status === 'fulfilled').map(r => r.value);
     };
@@ -404,7 +413,9 @@
     // Prefer loops that stay out of the water (bridge crossings only).
     const dry = cands.filter(c => !crossesWater(c.pts));
     if (dry.length) cands = dry;
-    let pool = cands.slice().sort((a, b) => Math.abs(a.dist - target) - Math.abs(b.dist - target));
+    let pool = state.distSet
+      ? cands.slice().sort((a, b) => Math.abs(a.dist - target) - Math.abs(b.dist - target))
+      : cands.slice();
     // Deduplicate near-identical loops.
     let uniq = [];
     for (const c of pool) {
@@ -414,7 +425,9 @@
       cands = cands.concat(await collect(4));
       const dry2 = cands.filter(c => !crossesWater(c.pts));
       if (dry2.length) cands = dry2;
-      pool = cands.slice().sort((a, b) => Math.abs(a.dist - target) - Math.abs(b.dist - target));
+      pool = state.distSet
+        ? cands.slice().sort((a, b) => Math.abs(a.dist - target) - Math.abs(b.dist - target))
+        : cands.slice();
       uniq = [];
       for (const c of pool) {
         if (!uniq.some(u => overlapFrac(u.pts, c.pts) > 0.55)) uniq.push(c);
@@ -649,7 +662,7 @@
   // Additive preference scoring: each preference contributes 0..1; "balanced"
   // options contribute a neutral constant so they don't skew the ranking.
   function scoreLoop(a, target) {
-    const distPen = Math.abs(a.dist - target) / target;
+    const distPen = (!state.distSet || !target) ? 0 : Math.abs(a.dist - target) / target;
     // Missing metrics score neutral (0.5) so partially-measured loops rank
     // sensibly while the rest of the data streams in.
     const shadeS = a.shadePct == null ? 0.5 : a.shadePct;
@@ -782,7 +795,7 @@
   // Stage 1 shows routes instantly; stage 2 fills in conditions in the background.
   function initPlaceholders(loop, target) {
     loop.distKm = loop.dist / 1000;
-    loop.fit = Math.abs(loop.dist - target) / target;
+    loop.fit = (state.distSet && target) ? Math.abs(loop.dist - target) / target : 0;
     loop.shadePct = null;
     loop.uvEff = null;
     loop.signals = null;
@@ -936,7 +949,9 @@
       let picks;
       if (isLoop) {
         picks = await generateLoops(target);
-        if (!picks.length) throw new Error('Could not build a loop of that distance here — try moving the start point or changing the distance.');
+        if (!picks.length) throw new Error(state.distSet
+          ? 'Could not build a loop of that distance here — try moving the start point or changing the distance.'
+          : 'Could not build a loop here — try moving the start point.');
         picks.forEach(l => initPlaceholders(l, target));
         $('results-title').textContent = 'Loop options';
         $('cards').setAttribute('aria-label', 'Suggested loop routes');
@@ -962,7 +977,7 @@
           picks = uniq;
           if (!picks.length) throw new Error('No walking route found between those points — try moving the end pin somewhere reachable on foot.');
           picks.forEach(r => initPlaceholders(r, r.dist)); // fit = 0 → keep OSRM's order
-          $('results-title').textContent = target < directDist * 0.95
+          $('results-title').textContent = (state.distSet && target < directDist * 0.95)
             ? `Shortest start → end (target ${state.distKm} km is below the ${(directDist / 1000).toFixed(1)} km direct walk)`
             : 'Start → End routes';
           $('cards').setAttribute('aria-label', 'Suggested routes');
@@ -1080,7 +1095,6 @@
   /* ================= boot ================= */
   applyPanelMode(); // panel starts fully open in whichever layout fits the screen
   setStart(DEFAULT_START, DEFAULT_START.label);
-  setDist(3);
   syncTimeUI();
   loadWeather();
   loadWater(); // warm river/water data so the first search is fast

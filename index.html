@@ -19,7 +19,7 @@
   <div id="sheet-handle" role="slider" tabindex="0" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="2" aria-valuenow="2" aria-valuetext="Fully open" aria-label="Panel position — drag the bar, use arrow keys, or double-tap to cycle: Hidden, Half open, Fully open"><span class="grabber" aria-hidden="true"></span></div>
   <section id="panel-setup">
     <h1>Plan your run</h1>
-    <p class="hint">Search or tap to set a <strong>start</strong> and an <strong>end</strong> (or leave it as a loop), pick a distance, and get up to 3 routes ranked by conditions <strong>right now</strong> — shade, heat, hills, traffic signals and how much is on paths &amp; trails.</p>
+    <p class="hint">Search or tap to set a <strong>start</strong> and an <strong>end</strong> (or leave it as a loop), type an optional distance, and get up to 3 routes ranked by conditions <strong>right now</strong> — shade, heat, hills, traffic signals and how much is on paths &amp; trails.</p>
 
     <fieldset>
       <legend>Drop pins on the map</legend>
@@ -77,19 +77,10 @@
 
     <fieldset>
       <legend>Distance</legend>
-      <div class="chips" id="dist-chips" role="group" aria-label="Distance">
-        <button class="chip-btn" data-km="2" aria-pressed="false">2 km</button>
-        <button class="chip-btn" data-km="3" aria-pressed="true">3 km</button>
-        <button class="chip-btn" data-km="5" aria-pressed="false">5 km</button>
-        <button class="chip-btn" data-km="8" aria-pressed="false">8 km</button>
-        <button class="chip-btn" data-km="10" aria-pressed="false">10 km</button>
+      <div class="search-row">
+        <input id="dist-input" type="text" inputmode="decimal" autocomplete="off" placeholder="Optional — e.g. 5 or 4.5 km" aria-label="Estimated distance in kilometres, optional">
       </div>
-      <div class="slider-row">
-        <label for="dist-slider">Custom:</label>
-        <input id="dist-slider" type="range" min="1" max="15" step="0.5" value="3">
-        <output id="dist-out" for="dist-slider">3 km</output>
-      </div>
-      <p class="hint" id="dist-hint">Your loop will be about this long.</p>
+      <p class="hint" id="dist-hint">Type your own estimated distance, e.g. 5 or 4.5 km. Leave it blank and we'll just find you a good loop — no target length.</p>
     </fieldset>
 
     <fieldset>

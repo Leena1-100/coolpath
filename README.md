@@ -1,8 +1,9 @@
 # ComfortRoute — shaded loop running routes (Brisbane)
 
 App-style web app that recommends **loop routes** (no destination needed): pick a start point
-and a distance (2–10 km or custom), and get **3 loop options** ranked by conditions
-**at the current moment** — shade, effective UV, steepness, traffic signals, water stops.
+and optionally type an estimated distance in km (leave blank for no target length), and get
+**3 loop options** ranked by conditions **at the current moment** — shade, effective UV,
+steepness, traffic signals, water stops.
 
 ## Run
 ```bash
