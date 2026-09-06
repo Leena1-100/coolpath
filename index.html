@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<div id="map" aria-label="Map of Brisbane. Tap the map to set your start point."></div>
+<div id="map" aria-label="Map of Brisbane. Choose a pin type, then tap the map to set it."></div>
 
 <header class="topbar">
   <span class="brand">ComfortRoute</span>
@@ -30,10 +30,12 @@
 
     <div id="details-body" class="details-body">
       <div class="details-inner">
-        <p class="hint">Search or tap to set a <strong>start</strong> and an <strong>end</strong> (or leave it as a loop), type an optional distance, and get up to 3 routes ranked by conditions <strong>right now</strong> — shade, heat, hills, traffic signals and how much is on paths &amp; trails.</p>
+        <p class="hint">Search or tap to set a <strong>start</strong> and — if you like — a <strong>turn-around point</strong> the route passes through on the way back, plus optional <strong>stops</strong> to visit, and get up to 3 routes ranked by conditions <strong>right now</strong> — shade, heat, hills, traffic signals and how much is on paths &amp; trails.</p>
         <ul class="details-list">
           <li>Choose a pin button, then tap the map to drop a pin at that exact spot.</li>
-          <li>Untick "Return to start" to run point-to-point; the route takes the long way round to hit your distance.</li>
+          <li>A turn-around point is a turning point, not a destination: the route goes out to it and comes back, closing at your start.</li>
+          <li>"Loop back from a turn point" returns on different streets by default; "Out and back" retraces the same path.</li>
+          <li>Add up to 5 stops (a park, a water tap) — they're visited in the order you add them.</li>
           <li>Slide the time forward to plan shade and UV for later in the day, then fine-tune it on the results screen.</li>
           <li>Distance is optional — leave it blank for no target length.</li>
         </ul>
@@ -44,7 +46,7 @@
       <legend>Drop pins on the map</legend>
       <div class="chips" id="pin-chips" role="group" aria-label="Choose which pin the next map tap drops">
         <button class="chip-btn" id="pin-start" aria-pressed="true">Start pin</button>
-        <button class="chip-btn" id="pin-end" aria-pressed="false">End pin</button>
+        <button class="chip-btn" id="pin-turn" aria-pressed="false">Turn-around pin</button>
       </div>
       <div id="pin-card" class="pin-card" role="status" aria-live="polite" hidden>
         <div class="pin-card-head">
@@ -54,7 +56,7 @@
         <code id="pin-coords" class="pin-coords" aria-label="Dropped pin coordinates"></code>
         <div class="pin-card-actions">
           <button id="pin-use-start" class="btn ghost btn-sm">Use as Start</button>
-          <button id="pin-use-end" class="btn ghost btn-sm">Use as End</button>
+          <button id="pin-use-turn" class="btn ghost btn-sm">Use as Turn-around</button>
         </div>
       </div>
     </fieldset>
@@ -75,16 +77,29 @@
     </fieldset>
 
     <fieldset>
-      <legend>End point</legend>
+      <legend>Turn-around point</legend>
       <label class="check-row">
         <input type="checkbox" id="same-end" checked>
-        <span>Return to start (loop)</span>
+        <span>No turn point — loop straight from start</span>
       </label>
       <div class="search-row" id="end-row" hidden>
-        <input id="end-input" type="search" placeholder="Search an end place…" autocomplete="off" aria-label="Search for an end location in Brisbane">
+        <input id="end-input" type="search" placeholder="Search a turn-around place… " autocomplete="off" aria-label="Search for a turn-around point in Brisbane">
       </div>
-      <div id="end-results" class="results-list" role="listbox" aria-label="End location search results" hidden></div>
+      <div id="end-results" class="results-list" role="listbox" aria-label="Turn-around point search results" hidden></div>
       <span id="end-label" class="start-label" hidden></span>
+      <div class="chips shape-chips" id="shape-chips" role="group" aria-label="Route shape when a turn point is set" hidden>
+        <button class="chip-btn" data-shape="loop" aria-pressed="true">Loop (different way back)</button>
+        <button class="chip-btn" data-shape="outback" aria-pressed="false">Out and back (retrace)</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Stops along the way (optional)</legend>
+      <div class="chips">
+        <button class="chip-btn" id="btn-wp" aria-pressed="false">Add a stop</button>
+      </div>
+      <p id="wp-hint" class="hint">Tap the map to add up to 5 stops — the route passes through each, in the order you add them.</p>
+      <ul id="wp-list" class="wp-list" aria-label="Stops the route passes through"></ul>
     </fieldset>
 
     <fieldset>
@@ -101,6 +116,7 @@
       <div class="search-row">
         <input id="dist-input" type="text" inputmode="decimal" autocomplete="off" placeholder="Optional — e.g. 5 or 4.5 km" aria-label="Estimated distance in kilometres, optional">
       </div>
+      <p id="dist-hint" class="hint">Your loop will be about this long.</p>
     </fieldset>
 
     <fieldset>
@@ -153,7 +169,7 @@
       </div>
     </fieldset>
 
-    <button id="btn-find" class="btn primary">Find loop routes</button>
+    <button id="btn-find" class="btn primary">Find routes</button>
     <p id="status" role="status" aria-live="polite"></p>
   </section>
 

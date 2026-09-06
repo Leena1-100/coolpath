@@ -34,9 +34,13 @@
     startMarker: null,
     routeLayer: L.layerGroup().addTo(map),
     poiLayer: L.layerGroup().addTo(map),
+    wpLayer: L.layerGroup().addTo(map),
     waterWays: [],
-    end: null,
-    endMarker: null,
+    turn: null,          // { lat, lon, label } — the point the route turns around at
+    turnMarker: null,
+    wpMode: false,       // "Add a stop" armed → next map tap drops a waypoint
+    waypoints: [],       // visited in the order added
+    shape: 'loop',       // turn-point route shape: 'loop' (different way back) | 'outback' (retrace)
     routeTarget: null,
     pinMode: 'start',
     pin: null,
@@ -216,33 +220,110 @@
     loadWater(); // keep river/water data warm for the new area (non-blocking)
   }
 
-  /* ================= end point (point-to-point mode) ================= */
-  function setEnd(p, label) {
+  /* ================= turn-around point + stops (waypoints) ================= */
+  const MAX_WAYPOINTS = 5; // keeps OSRM requests fast (≤8 coords) and the map uncluttered
+
+  // Turn marker: purple teardrop + U-turn arrow — reads as "turn around here",
+  // deliberately distinct from the navy start pin.
+  function turnIcon() {
+    return L.divIcon({
+      className: '',
+      html: `<svg width="30" height="41" viewBox="0 0 30 41" role="img" aria-label="Turn around here"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.6 15 26 15 26s15-15.4 15-26C30 6.7 23.3 0 15 0z" fill="#7c3aed" stroke="#fff" stroke-width="2"/><g transform="translate(15,15)" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M-4.5 4.5 V-1 a3.5 3.5 0 0 1 3.5 -3.5 h4"/><path d="M1 -6.5 L3.5 -4.5 L1 -2.5"/></g></svg>`,
+      iconSize: [30, 41], iconAnchor: [15, 39], popupAnchor: [0, -38]
+    });
+  }
+  // Stop markers: small teal numbered dots — passes-through, not destinations.
+  function wpIcon(n) {
+    return L.divIcon({
+      className: '',
+      html: `<svg width="26" height="26" viewBox="0 0 26 26" role="img" aria-label="Stop ${n}"><circle cx="13" cy="13" r="10" fill="#0d9488" stroke="#fff" stroke-width="2.5"/><text x="13" y="17.5" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="inherit">${n}</text></svg>`,
+      iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -13]
+    });
+  }
+  function setTurn(p, label) {
     const q = normPt(p);
-    state.end = { lat: q.lat, lon: q.lon, label };
-    if (state.endMarker) state.endMarker.remove();
-    state.endMarker = L.marker([q.lat, q.lon], {
-      icon: pinIcon('#0a7d33', 'End point'),
-      title: 'End point', alt: 'End point'
+    state.turn = { lat: q.lat, lon: q.lon, label };
+    if (state.turnMarker) state.turnMarker.remove();
+    state.turnMarker = L.marker([q.lat, q.lon], {
+      icon: turnIcon(),
+      title: 'Turn around here', alt: 'Turn around here',
+      keyboard: false
     }).addTo(map);
     const el = $('end-label');
     el.hidden = false;
-    el.textContent = 'End: ' + label;
+    el.textContent = 'Turn around: ' + label;
+    // A turn point implies the "loop back" mode.
+    if ($('same-end').checked) {
+      $('same-end').checked = false;
+      $('same-end').dispatchEvent(new Event('change'));
+    }
+    $('shape-chips').hidden = false;
   }
-  function clearEnd() {
-    state.end = null;
-    if (state.endMarker) { state.endMarker.remove(); state.endMarker = null; }
+  function clearTurn() {
+    state.turn = null;
+    if (state.turnMarker) { state.turnMarker.remove(); state.turnMarker = null; }
     $('end-label').hidden = true;
-    if (state.pin && state.pin.role === 'end') { state.pin = null; $('pin-card').hidden = true; }
+    $('shape-chips').hidden = true;
+    if (state.pin && state.pin.role === 'turn') { state.pin = null; $('pin-card').hidden = true; }
+  }
+  function toggleShape(shape) {
+    state.shape = shape;
+    document.querySelectorAll('#shape-chips .chip-btn').forEach(x =>
+      x.setAttribute('aria-pressed', String(x.dataset.shape === shape)));
+    if (state.loops.length && !$('panel-results').hidden) findRoutes(); // re-route live
+  }
+  document.querySelectorAll('#shape-chips .chip-btn').forEach(b =>
+    b.addEventListener('click', () => toggleShape(b.dataset.shape)));
+
+  function renderWpList() {
+    const ul = $('wp-list');
+    ul.innerHTML = '';
+    state.waypoints.forEach((wp, i) => {
+      const li = document.createElement('li');
+      li.className = 'wp-item';
+      const span = document.createElement('span');
+      span.textContent = `${i + 1}. ${wp.label}`;
+      li.appendChild(span);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'wp-remove';
+      x.setAttribute('aria-label', `Remove stop ${i + 1}`);
+      x.textContent = '×';
+      x.addEventListener('click', () => removeWaypoint(i));
+      li.appendChild(x);
+      ul.appendChild(li);
+    });
+    // Waypoint markers live in their own layer so drawRoutes()/back-navigation
+    // can't wipe them — they persist until removed from the list.
+    state.wpLayer.clearLayers();
+    state.waypoints.forEach((wp, i) =>
+      L.marker([wp.lat, wp.lon], {
+        icon: wpIcon(i + 1),
+        title: `Stop ${i + 1}`, alt: `Stop ${i + 1}`, keyboard: false
+      }).addTo(state.wpLayer));
+  }
+  function addWaypoint(lat, lon, label) {
+    if (state.waypoints.length >= MAX_WAYPOINTS) {
+      setStatus(`That's the limit — up to ${MAX_WAYPOINTS} stops per route. Remove one to add another.`, true);
+      return false;
+    }
+    state.waypoints.push({ lat, lon, label });
+    renderWpList();
+    return true;
+  }
+  function removeWaypoint(i) {
+    state.waypoints.splice(i, 1);
+    renderWpList();
+    setStatus('Stop removed — routes will update on your next search.');
   }
   $('same-end').addEventListener('change', e => {
     if (e.target.checked) {
-      clearEnd();
+      clearTurn();
       $('dist-hint').textContent = 'Your loop will be about this long.';
     } else {
       $('end-row').hidden = false;
       $('end-input').focus();
-      $('dist-hint').textContent = 'Priority: routes aim for this total distance — we take the long way round if the direct walk is shorter.';
+      $('dist-hint').textContent = 'Turn point set: the route passes through it and returns to your start. Without a distance we aim for roughly twice the straight-line out-and-back.';
     }
   });
 
@@ -287,9 +368,9 @@
     map.setView([h.lat, h.lon], 16);
   });
   wireSearch('end-input', 'end-results', h => {
-    setEnd(h, h.label);
+    setTurn(h, h.label);
     if (state.startMarker) {
-      map.fitBounds(L.latLngBounds([state.start, state.end].map(p => [p.lat, p.lon])).pad(0.3));
+      map.fitBounds(L.latLngBounds([state.start, state.turn].map(p => [p.lat, p.lon])).pad(0.3));
     }
   });
 
@@ -297,20 +378,26 @@
   function setPinMode(m) {
     state.pinMode = m;
     $('pin-start').setAttribute('aria-pressed', String(m === 'start'));
-    $('pin-end').setAttribute('aria-pressed', String(m === 'end'));
-    // Dropping an end pin implies point-to-point mode.
-    if (m === 'end' && $('same-end').checked) {
+    $('pin-turn').setAttribute('aria-pressed', String(m === 'turn'));
+    // Dropping a turn pin implies the "loop back from a turn point" mode.
+    if (m === 'turn' && $('same-end').checked) {
       $('same-end').checked = false;
+      $('same-end').dispatchEvent(new Event('change'));
+    }
+    // Dropping a stop implies the plain loop mode.
+    if (m === 'wp' && !$('same-end').checked) {
+      $('same-end').checked = true;
       $('same-end').dispatchEvent(new Event('change'));
     }
   }
   $('pin-start').addEventListener('click', () => setPinMode('start'));
-  $('pin-end').addEventListener('click', () => setPinMode('end'));
+  $('pin-turn').addEventListener('click', () => setPinMode('turn'));
 
   /* ================= dropped-pin card (precise coordinates) ================= */
   function showPinCard(lat, lon, role) {
     state.pin = { lat, lon, role };
-    $('pin-card-title').textContent = role === 'end' ? 'End pin dropped' : 'Start pin dropped';
+    $('pin-card-title').textContent =
+      role === 'turn' ? 'Turn-around pin dropped' : role === 'wp' ? 'Stop pin dropped' : 'Start pin dropped';
     $('pin-coords').textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
     $('pin-card').hidden = false;
   }
@@ -320,7 +407,13 @@
     if (state.busy || !$('panel-setup').offsetParent) return; // ignore in results view
     const lat = e.latlng.lat, lon = e.latlng.lng;
     const label = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-    if (state.pinMode === 'end') { setEnd(e.latlng, label); showPinCard(lat, lon, 'end'); }
+    if (state.pinMode === 'wp') {
+      // Extra stops: one tap adds one, in the order tapped. No pin-card — the
+      // numbered list under "Add a stop" is how they're managed.
+      if (addWaypoint(lat, lon, label)) setStatus(`Stop ${state.waypoints.length} added — it's numbered on the map.`);
+      return;
+    }
+    if (state.pinMode === 'turn') { setTurn(e.latlng, label); showPinCard(lat, lon, 'turn'); }
     else { setStart(e.latlng, label); showPinCard(lat, lon, 'start'); }
   });
 
@@ -331,20 +424,19 @@
     state.pin.role = 'start';
     $('pin-card-title').textContent = 'Start pin dropped';
   });
-  $('pin-use-end').addEventListener('click', () => {
+  $('pin-use-turn').addEventListener('click', () => {
     if (!state.pin) return;
-    if ($('same-end').checked) { $('same-end').checked = false; $('same-end').dispatchEvent(new Event('change')); }
-    setEnd(state.pin, pinLabel(state.pin));
-    state.pin.role = 'end';
-    $('pin-card-title').textContent = 'End pin dropped';
+    setTurn(state.pin, pinLabel(state.pin));
+    state.pin.role = 'turn';
+    $('pin-card-title').textContent = 'Turn-around pin dropped';
   });
-  // Clear → remove the pin so a fresh start or end pin can be placed.
+  // Clear → remove the pin so a fresh start or turn pin can be placed.
   $('pin-clear').addEventListener('click', () => {
     if (!state.pin) return;
     const role = state.pin.role;
     state.pin = null;
     $('pin-card').hidden = true;
-    if (role === 'end') clearEnd();
+    if (role === 'turn') clearTurn();
     else setStart(DEFAULT_START, DEFAULT_START.label);
     setStatus('Pin cleared — choose a pin type, then tap the map to place a new one.');
   });
@@ -361,6 +453,22 @@
       () => setStatus('Could not get your location — tap the map instead.', true),
       { enableHighAccuracy: true, timeout: 8000 }
     );
+  });
+
+  /* ================= extra stops (waypoints) ================= */
+  const btnWp = $('btn-wp');
+  btnWp.addEventListener('click', () => {
+    if (state.waypoints.length >= MAX_WAYPOINTS) {
+      setStatus(`That's the limit — up to ${MAX_WAYPOINTS} stops per route. Remove one to add another.`, true);
+      return;
+    }
+    state.wpMode = !state.wpMode;
+    btnWp.setAttribute('aria-pressed', String(state.wpMode));
+    btnWp.textContent = state.wpMode ? 'Tap the map…' : 'Add a stop';
+    setPinMode('wp'); // a stop tap implies the plain loop mode
+    setStatus(state.wpMode
+      ? 'Now tap the map where the route should pass through.'
+      : 'Stop mode off — map taps set the start pin again.');
   });
 
   /* ================= inputs ================= */
@@ -529,20 +637,21 @@
     return n ? hit / n : 0;
   }
 
-  /* ============ long-way-round (distance is the priority) ============
-   * Start and end may be close together, but the user asked for a longer
-   * run: place a via point on the ellipse whose focal sum equals the
-   * straight-line length needed so the snapped street route lands close
-   * to the requested distance. */
-  async function generateDetours(targetM, directDist) {
-    const A = state.start, B = state.end;
+  /* ============ turn-point loops + via routes (passes-through) ============
+   * Build start → …stops… → turn point → …stops… → start in ONE OSRM request
+   * so the snapped route is continuous and the turn point is genuinely passed
+   * through, never a dead end. "Loop" spreads the return-leg via points on an
+   * ellipse (focal sum = half the target leg) so the way back takes different
+   * streets; "out and back" retraces the same path (OSRM collapses identical
+   * consecutive coords to a simple out-and-back). */
+  function ellipseVias(A, B, legTargetM) {
     const chord = Geo.haversine(A, B);
-    const detour = Math.max(directDist / chord, 1.15); // street factor vs straight line
-    const geoTarget = targetM / detour;                // straight-line length to aim for
-    const a = geoTarget / 2;                           // semi-major axis (focal sum = 2a)
-    const c = chord / 2;                               // focal distance
-    if (a <= c * 1.06) return [];                      // target unreachable even with max detour
-    const b = Math.sqrt(a * a - c * c);                // semi-minor axis
+    const detour = Math.max(1.25, legTargetM / Math.max(chord, 1)); // street factor vs straight line
+    const geoTarget = legTargetM / detour;   // straight-line length to aim for per leg
+    const a = geoTarget / 2;                 // semi-major axis (focal sum = 2a)
+    const c = chord / 2;                     // focal distance
+    if (a <= c * 1.02 || !isFinite(a) || !isFinite(c)) return []; // unreachable geometry
+    const b = Math.sqrt(a * a - c * c);      // semi-minor axis
     const midLat = (A.lat + B.lat) / 2, midLon = (A.lon + B.lon) / 2;
     // Unit chord vector in metres (east, north) + perpendicular.
     const ex = (B.lon - A.lon) * 111320 * Math.cos(A.lat * Math.PI / 180);
@@ -554,27 +663,78 @@
       lat: midLat + (x * uy + y * vy) / 111320,
       lon: midLon + (x * ux + y * vx) / (111320 * Math.cos(midLat * Math.PI / 180))
     });
-    const vias = [];
-    for (let i = 0; i < 40 && vias.length < 8; i++) {
-      const t = Math.random() * 2 * Math.PI;
-      const v = toLL(a * Math.cos(t), b * Math.sin(t)); // |Av| + |vB| = geoTarget
-      if (onWater(v, 90)) continue;                     // via points stay on land
-      if (Geo.haversine(v, A) < 200 || Geo.haversine(v, B) < 200) continue;
-      vias.push(v);
+    const via = [];
+    for (let i = 0; i < 40 && via.length < 2; i++) {
+      const t = (0.25 + Math.random() * 0.5) * Math.PI * 2; // biased away from the chord
+      const v = toLL(a * Math.cos(t), b * Math.sin(t));
+      if (onWater(v, 90)) continue;          // via points stay on land
+      if (Geo.haversine(v, A) < 120 || Geo.haversine(v, B) < 120) continue;
+      via.push(v);
     }
-    if (!vias.length) return [];
-    const results = await Promise.allSettled(vias.map(v => API.routeVia([A, v, B])));
-    let cands = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-    if (!cands.length) return [];
-    const near = cands.filter(r => r.dist > targetM * 0.85 && r.dist < targetM * 1.15);
-    if (near.length) cands = near;
-    const dry = cands.filter(r => !crossesWater(r.pts));
-    if (dry.length) cands = dry;
+    return via;
+  }
+
+  async function generateViaRoutes(target) {
+    const S = state.start, T = state.turn;
+    const chord = Geo.haversine(S, T);
+    // No distance given → aim for twice the straight-line out-and-back, so the
+    // loop roughly matches what a walker would expect without a target.
+    const targetM = target || Geo.clamp(chord * 2 * 1.3, 1200, 12000);
+    const legTarget = targetM / 2;
+    const outback = state.shape === 'outback';
+    // 1. Outbound leg candidates: start → [ellipse via] → turn point.
+    const outs = await Promise.allSettled(
+      Array.from({ length: 4 }, () =>
+        API.routeVia([S, ...ellipseVias(S, T, legTarget), T])));
+    const outbound = outs.filter(r => r.status === 'fulfilled').map(r => r.value);
+    if (!outbound.length) return [];
+    // Keep the leg closest to half the requested distance.
+    outbound.sort((a, b) => Math.abs(a.dist - legTarget) - Math.abs(b.dist - legTarget));
+    // 2. Return leg candidates.
+    let returns;
+    if (outback) {
+      // Retrace: same leg, reversed — passes through the turn point by construction.
+      returns = outbound.map(r => ({ dist: r.dist, pts: r.pts.slice().reverse() }));
+    } else {
+      const backs = await Promise.allSettled(
+        Array.from({ length: 4 }, () =>
+          API.routeVia([S, ...ellipseVias(S, T, legTarget), T])));
+      returns = backs.filter(r => r.status === 'fulfilled').map(r => r.value);
+      if (!returns.length) returns = outbound; // fall back to out-and-back rather than nothing
+    }
+    // 3. Assemble: out leg → return leg reversed → closed loop through T.
+    const cands = [];
+    for (const o of outbound.slice(0, 3)) {
+      for (const r of returns.slice(0, 3)) {
+        const pts = o.pts.concat(r.pts.slice().reverse().slice(1, -1));
+        cands.push({ dist: o.dist + r.dist, pts });
+      }
+    }
+    // 4. Quality gates: water crossings, distance fit, de-duplication.
+    let pool = cands.filter(c => !crossesWater(c.pts));
+    if (!pool.length) pool = cands;
+    if (state.distSet) {
+      const near = pool.filter(c => Math.abs(c.dist - targetM) < targetM * 0.25);
+      if (near.length) pool = near;
+      pool = pool.slice().sort((a, b) => Math.abs(a.dist - targetM) - Math.abs(b.dist - targetM));
+    }
     const uniq = [];
-    for (const r of cands.slice().sort((x, y) => Math.abs(x.dist - targetM) - Math.abs(y.dist - targetM))) {
-      if (!uniq.some(u => overlapFrac(u.pts, r.pts) > 0.6)) uniq.push(r);
+    for (const c of pool) {
+      if (!uniq.some(u => overlapFrac(u.pts, c.pts) > 0.75)) uniq.push(c);
     }
     return uniq.slice(0, 5);
+  }
+
+  // One OSRM request per candidate order: start → each stop (in the order
+  // added) → start. The cap keeps this fast and predictable.
+  async function generateWaypointLoops() {
+    const pts = [state.start, ...state.waypoints, state.start];
+    try {
+      const r = await API.routeVia(pts);
+      return [r];
+    } catch {
+      return [];
+    }
   }
 
   // Resample a polyline every `step` metres, tagging each point with its distance.
@@ -1024,18 +1184,40 @@
     }
   }
 
-  $('btn-find').addEventListener('click', async () => {
+  async function findRoutes() {
     if (state.busy) return;
     state.busy = true;
     $('btn-find').disabled = true;
-    const endPt = state.end;
-    const isLoop = !endPt || Geo.haversine(state.start, endPt) < 150;
-    const target = isLoop ? state.distKm * 1000 : 0;
+    const turnPt = state.turn;
+    // A turn point within 150 m of the start is a no-op → degrade to a plain loop.
+    const hasTurn = !!turnPt && Geo.haversine(state.start, turnPt) >= 150;
+    const useWps = state.waypoints.length > 0;
+    const target = state.distKm * 1000;
     try {
-      setStatus(isLoop ? 'Finding loops…' : 'Finding routes…');
+      setStatus(hasTurn ? 'Finding routes through your turn-around point…'
+        : useWps ? 'Finding routes through your stops…'
+        : 'Finding loops…');
       state.waterWays = await loadWater(); // usually instant (warmed at boot)
       let picks;
-      if (isLoop) {
+      if (hasTurn) {
+        // Turn-around loop: start → (stops) → turn point → (stops) → start,
+        // passing through the turn point — never a dead-end destination.
+        picks = await generateViaRoutes(target);
+        if (!picks.length) throw new Error(state.distSet
+          ? `Couldn't build a ${state.distKm} km loop through that turn-around point — try a shorter distance, move the turn point, or untick it for a plain loop.`
+          : 'Could not build a loop through that turn-around point — try moving it closer to streets and paths, or untick it for a plain loop.');
+        picks.forEach(r => initPlaceholders(r, state.distSet ? target : r.dist));
+        $('results-title').textContent =
+          (state.shape === 'outback' ? 'Out and back via ' : 'Loop via ') + (turnPt.label || 'your turn point');
+        $('cards').setAttribute('aria-label', 'Suggested loops through your turn-around point');
+      } else if (useWps) {
+        // Plain loop that passes through each stop, in the order they were added.
+        picks = await generateWaypointLoops();
+        if (!picks.length) throw new Error('Could not build a walking route through those stops — try moving one closer to streets or paths.');
+        picks.forEach(r => initPlaceholders(r, state.distSet ? target : r.dist));
+        $('results-title').textContent = `Loop through ${state.waypoints.length} stop${state.waypoints.length > 1 ? 's' : ''}`;
+        $('cards').setAttribute('aria-label', 'Suggested loops through your stops');
+      } else {
         picks = await generateLoops(target);
         if (!picks.length) throw new Error(state.distSet
           ? 'Could not build a loop of that distance here — try moving the start point or changing the distance.'
@@ -1043,35 +1225,8 @@
         picks.forEach(l => initPlaceholders(l, target));
         $('results-title').textContent = 'Loop options';
         $('cards').setAttribute('aria-label', 'Suggested loop routes');
-      } else {
-        // Point-to-point: the requested distance is the priority.
-        const direct = await API.route(state.start, endPt, false);
-        const directDist = direct[0] ? direct[0].dist : Geo.haversine(state.start, endPt);
-        if (target > directDist * 1.25) {
-          // Far apart in distance terms → wander through nearby paths to hit it.
-          picks = await generateDetours(target, directDist);
-          if (!picks.length) throw new Error(`Couldn't stretch a route between those places to ${state.distKm} km — they're only ${(directDist / 1000).toFixed(1)} km apart. Try a shorter distance or a loop instead.`);
-          picks.forEach(r => initPlaceholders(r, target)); // fit = distance accuracy
-          $('results-title').textContent = `Long-way-round · ${state.distKm} km start → end`;
-          $('cards').setAttribute('aria-label', 'Suggested long routes from start to end');
-        } else {
-          picks = await API.route(state.start, endPt, true);
-          const dry = picks.filter(r => !crossesWater(r.pts));
-          if (dry.length) picks = dry; // bridge crossings only, never over water
-          const uniq = [];
-          for (const r of picks) {
-            if (!uniq.some(u => overlapFrac(u.pts, r.pts) > 0.7)) uniq.push(r);
-          }
-          picks = uniq;
-          if (!picks.length) throw new Error('No walking route found between those points — try moving the end pin somewhere reachable on foot.');
-          picks.forEach(r => initPlaceholders(r, r.dist)); // fit = 0 → keep OSRM's order
-          $('results-title').textContent = (state.distSet && target < directDist * 0.95)
-            ? `Shortest start → end (target ${state.distKm} km is below the ${(directDist / 1000).toFixed(1)} km direct walk)`
-            : 'Start → End routes';
-          $('cards').setAttribute('aria-label', 'Suggested routes');
-        }
       }
-      state.routeTarget = isLoop ? target : (picks[0] ? picks[0].dist : target);
+      state.routeTarget = picks[0] ? picks[0].dist : target;
       picks.sort((a, b) => a.fit - b.fit);
       state.loops = picks.slice(0, 3);
       state.selected = 0;
@@ -1098,7 +1253,8 @@
       state.busy = false;
       $('btn-find').disabled = false;
     }
-  });
+  }
+  $('btn-find').addEventListener('click', findRoutes);
 
   /* ================= draggable panel (bottom sheet ↔ side drawer) =================
      Two layouts chosen by screen size/orientation: bottom sheet slides up/down,

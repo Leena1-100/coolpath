@@ -425,3 +425,29 @@ legend {
   .rec-cols { grid-template-columns: 1fr; }
   .rec-factor .rf-name { width: 96px; }
 }
+
+/* ---------- turn-around point + stops ---------- */
+.shape-chips { margin-top: 10px; }
+.wp-list {
+  list-style: none; margin-top: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.wp-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface-soft); border: 1px solid var(--border);
+  border-radius: var(--r-md); font-size: 0.9rem; font-weight: 600;
+}
+.wp-item span {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-remove {
+  flex: none; width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--border-strong); background: var(--surface);
+  color: var(--text-muted); font-size: 1rem; line-height: 1; cursor: pointer;
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.wp-remove:hover { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+.wp-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn.btn-sm { min-height: 36px; padding: 6px 12px; font-size: 0.85rem; }
+

@@ -224,6 +224,92 @@ async function newPage(browser, opts = {}) {
     await page.close();
   }
 
+  /* Stage 5: turn-around point flow (end-to-end via the real UI) */
+  console.log('\n== Stage 5: turn-around point flow ==');
+  {
+    const { page, errors } = await newPage(browser, { uv: 9.5, temp: 37 });
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+    await new Promise(r => setTimeout(r, 500));
+    // Choose the turn-around pin chip, then tap the map away from the start.
+    await page.click('#pin-turn');
+    await page.mouse.click(200, 260); // on the map, far from the start pin
+    await new Promise(r => setTimeout(r, 400));
+    const pinState = await page.evaluate(() => ({
+      turnLabel: document.getElementById('end-label').textContent,
+      turnVisible: !document.getElementById('end-label').hidden,
+      shapesVisible: !document.getElementById('shape-chips').hidden,
+      pinCard: document.getElementById('pin-card-title').textContent
+    }));
+    console.log('  pin:', JSON.stringify(pinState));
+    ok('turn label set from map tap', pinState.turnVisible && /Turn around:/.test(pinState.turnLabel), pinState.turnLabel);
+    ok('shape chips revealed', pinState.shapesVisible);
+    ok('pin card says turn-around', /Turn-around/.test(pinState.pinCard), pinState.pinCard);
+    await page.click('#btn-find');
+    await new Promise(r => setTimeout(r, 1800));
+    const res = await page.evaluate(() => ({
+      title: document.getElementById('results-title').textContent,
+      cards: document.querySelectorAll('.card').length,
+      recHidden: document.getElementById('recommendation').hidden
+    }));
+    console.log('  results:', JSON.stringify(res));
+    ok('results titled "Loop via …"', /Loop via/.test(res.title), res.title);
+    ok('turn-point routes render', res.cards > 0);
+    ok('recommendation follows turn loop', res.recHidden === false);
+    // Flip the shape chip → live re-route through the same UI.
+    await page.evaluate(() => {
+      document.querySelector('#shape-chips [data-shape="outback"]').click();
+    });
+    await new Promise(r => setTimeout(r, 1500));
+    const title2 = await page.evaluate(() => document.getElementById('results-title').textContent);
+    ok('shape chip re-routes to out-and-back', /Out and back via/.test(title2), title2);
+    ok('no pageerror in turn flow', errors.filter(e => e.startsWith('pageerror')).length === 0, errors.slice(0, 2).join('|'));
+    await page.close();
+  }
+
+  /* Stage 6: extra stops (waypoints) flow */
+  console.log('\n== Stage 6: stops (waypoints) flow ==');
+  {
+    const { page, errors } = await newPage(browser, { uv: 3, temp: 22 });
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+    await new Promise(r => setTimeout(r, 500));
+    await page.click('#btn-wp');
+    await page.mouse.click(220, 300); // stop 1
+    await new Promise(r => setTimeout(r, 300));
+    await page.mouse.click(300, 380); // stop 2
+    await new Promise(r => setTimeout(r, 300));
+    const wpState = await page.evaluate(() => ({
+      items: document.querySelectorAll('#wp-list .wp-item').length,
+      first: document.querySelector('#wp-list .wp-item span')?.textContent || '',
+      removeBtns: document.querySelectorAll('#wp-list .wp-remove').length,
+      pressed: document.getElementById('btn-wp').getAttribute('aria-pressed')
+    }));
+    console.log('  stops:', JSON.stringify(wpState));
+    ok('two stops listed in add order', wpState.items === 2 && /^1\./.test(wpState.first), wpState.first);
+    ok('each stop has a remove ×', wpState.removeBtns === 2);
+    ok('add-stop chip stays armed', wpState.pressed === 'true');
+    await page.click('#btn-find');
+    await new Promise(r => setTimeout(r, 1800));
+    const res = await page.evaluate(() => ({
+      title: document.getElementById('results-title').textContent,
+      cards: document.querySelectorAll('.card').length
+    }));
+    console.log('  results:', JSON.stringify(res));
+    ok('results titled "Loop through 2 stops"', /Loop through 2 stops/.test(res.title), res.title);
+    ok('waypoint-loop routes render', res.cards > 0);
+    // Back to setup, remove a stop, search again → count drops.
+    await page.click('#btn-back');
+    await page.click('#wp-list .wp-remove');
+    await new Promise(r => setTimeout(r, 300));
+    const after = await page.evaluate(() => document.querySelectorAll('#wp-list .wp-item').length);
+    ok('× removes a stop', after === 1, `items=${after}`);
+    await page.click('#btn-find');
+    await new Promise(r => setTimeout(r, 1800));
+    const title2 = await page.evaluate(() => document.getElementById('results-title').textContent);
+    ok('route recalculates with 1 stop', /Loop through 1 stop$/.test(title2), title2);
+    ok('no pageerror in stops flow', errors.filter(e => e.startsWith('pageerror')).length === 0, errors.slice(0, 2).join('|'));
+    await page.close();
+  }
+
   await browser.close();
   srv.close();
   console.log(`\n=== HARNESS: ${pass} passed, ${fail} failed ===`);
