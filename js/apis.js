@@ -244,18 +244,21 @@ const API = (() => {
       `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coords}?overview=full&geometries=geojson`,
       `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`
     ];
-    let lastErr;
-    for (const url of urls) {
-      try {
+    // Race both mirrors in parallel — first successful response wins, which
+    // roughly halves routing latency when either host is having a slow day.
+    try {
+      const r = await Promise.any(urls.map(async url => {
         const res = await fetch(url);
         if (!res.ok) throw new Error('OSRM HTTP ' + res.status);
         const json = await res.json();
         if (json.code !== 'Ok' || !json.routes.length) throw new Error('No route (OSRM: ' + json.code + ')');
-        const r = json.routes[0];
-        return { dist: r.distance, dur: r.duration, pts: r.geometry.coordinates.map(c => ({ lat: c[1], lon: c[0] })) };
-      } catch (err) { lastErr = err; }
+        return json.routes[0];
+      }));
+      return { dist: r.distance, dur: r.duration, pts: r.geometry.coordinates.map(c => ({ lat: c[1], lon: c[0] })) };
+    } catch (err) {
+      throw new Error('Routing request failed' +
+        (err && err.errors ? ': ' + err.errors.map(e => e.message).join('; ') : ''));
     }
-    throw lastErr || new Error('Routing request failed');
   }
 
   // Heat-warning check. Uses observed/forecast temperature (Open-Meteo, a

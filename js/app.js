@@ -52,11 +52,12 @@
     persona: 'general'
   };
 
-  const setStatus = (msg, isError) => {
-    $('status').textContent = msg || '';
+  const setStatus = (msg, isError, loading) => {
+    const html = (msg || '') + (loading ? ' ' + SPIN : '');
+    $('status').innerHTML = html;
     $('status').classList.toggle('error', !!isError);
     const rs = $('result-status'); // results view has its own status line
-    rs.textContent = msg || '';
+    rs.innerHTML = html;
     rs.classList.toggle('error', !!isError);
   };
 
@@ -954,6 +955,8 @@
   }
 
   /* ================= rendering ================= */
+  const SPIN = '<span class="spinner" role="img" aria-label="Loading"></span>';
+
   function shadeColor(v) {
     return v >= 0.55 ? '#1565d8' : v <= 0.25 ? '#d97400' : '#6b7280';
   }
@@ -995,7 +998,7 @@
   function renderCards() {
     const box = $('cards');
     box.innerHTML = '';
-    const nz = (v, f) => (v == null ? '…' : f(v));
+    const nz = (v, f) => (v == null ? SPIN : f(v));
     state.loops.forEach((loop, i) => {
       const mins = Math.round(loop.distKm * 5.5);
       const measured = loop.shadePct != null;
@@ -1157,10 +1160,9 @@
           rerank();
         }),
         (async () => {
-          for (const l of state.loops.slice()) {
-            if (!alive()) return;
-            await applyGrade(l);
-          }
+          // Elevation calls are independent HTTP requests — run them in
+          // parallel instead of one loop at a time.
+          await Promise.allSettled(state.loops.slice().map(applyGrade));
           rerank();
         })()
       ];
@@ -1188,6 +1190,7 @@
     if (state.busy) return;
     state.busy = true;
     $('btn-find').disabled = true;
+    $('btn-find').classList.add('loading');
     const turnPt = state.turn;
     // A turn point within 150 m of the start is a no-op → degrade to a plain loop.
     const hasTurn = !!turnPt && Geo.haversine(state.start, turnPt) >= 150;
@@ -1196,8 +1199,9 @@
     try {
       setStatus(hasTurn ? 'Finding routes through your turn-around point…'
         : useWps ? 'Finding routes through your stops…'
-        : 'Finding loops…');
+        : 'Finding loops…', false, true);
       state.waterWays = await loadWater(); // usually instant (warmed at boot)
+      loadContext(); // warm condition data in parallel with route generation (not awaited)
       let picks;
       if (hasTurn) {
         // Turn-around loop: start → (stops) → turn point → (stops) → start,
@@ -1238,7 +1242,7 @@
       drawRoutes();
       selectLoop(0);
       document.querySelector('.card')?.focus();
-      setStatus('Routes ready — measuring conditions…');
+      setStatus('Routes ready — measuring conditions…', false, true);
       loadWeather();
       // Heat warning: fetched once per search (never throws). The
       // recommendation refreshes when it lands.
@@ -1252,6 +1256,7 @@
     } finally {
       state.busy = false;
       $('btn-find').disabled = false;
+      $('btn-find').classList.remove('loading');
     }
   }
   $('btn-find').addEventListener('click', findRoutes);

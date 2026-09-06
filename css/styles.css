@@ -451,3 +451,44 @@ legend {
 .wp-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn.btn-sm { min-height: 36px; padding: 6px 12px; font-size: 0.85rem; }
 
+/* ================= loading spinner =================
+ * Inline spinner that inherits the surrounding text color and size, so it
+ * works in status lines, route-card metrics and buttons alike. */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.12em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.85;
+}
+.card .metric .spinner { width: 12px; height: 12px; border-width: 2px; }
+.btn.loading {
+  position: relative;
+  color: transparent; /* hide the label while the spinner shows */
+  pointer-events: none;
+}
+.btn.loading::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 18px; height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2.5px solid rgba(255, 255, 255, 0.45);
+  border-right-color: #fff;
+  border-radius: 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .spinner { animation: spin 0.8s linear infinite; }
+  .btn.loading::after { animation: spin 0.8s linear infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No rotation: a gentle opacity pulse still signals "working". */
+  .spinner, .btn.loading::after { animation: pulse 1.2s ease-in-out infinite; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.35; } }
+
+
