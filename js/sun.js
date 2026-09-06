@@ -76,12 +76,12 @@ const Sun = (() => {
   //   direct component : UV × directFrac × (1 − shade)
   //   diffuse component: UV × diffuseFrac × (1 − 0.45 × shade)
   // Diffuse fraction rises as the sun gets lower (more scattering path).
-  function effectiveUV(uv, shade, altDeg) {
+  function effectiveUV(uv, shadeFrac, altDeg) {
     if (uv == null) return null;
     const sinAlt = Math.sin((altDeg == null ? 45 : altDeg) * RAD);
     const diffuse = Math.min(0.55, 0.36 + 0.15 * (1 - Math.max(0, sinAlt)));
     const direct = 1 - diffuse;
-    const shade = Math.max(0, Math.min(1, shade));
+    const shade = Math.max(0, Math.min(1, shadeFrac));
     return uv * (direct * (1 - shade) + diffuse * (1 - 0.45 * shade));
   }
 
