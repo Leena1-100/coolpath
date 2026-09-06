@@ -68,8 +68,22 @@ const Sun = (() => {
     return { shade: shadeGivenSun(point, buildings, sun), sun };
   }
 
-  // Effective UV at a shaded point (full shade blocks ~90% of UV).
-  const effectiveUV = (uv, shade) => uv * (1 - 0.9 * shade);
+  // Effective UV at a shaded point, splitting direct vs diffuse (scattered) UV.
+  // Direct beam is blocked by shade; diffuse sky UV is only partially reduced
+  // (shaded ground still sees much of the sky + ground reflection). Measurements
+  // put full-shade transmission around 20–35% of ambient — a plain "shade blocks
+  // 90%" rule underestimates it, so we model both components explicitly.
+  //   direct component : UV × directFrac × (1 − shade)
+  //   diffuse component: UV × diffuseFrac × (1 − 0.45 × shade)
+  // Diffuse fraction rises as the sun gets lower (more scattering path).
+  function effectiveUV(uv, shade, altDeg) {
+    if (uv == null) return null;
+    const sinAlt = Math.sin((altDeg == null ? 45 : altDeg) * RAD);
+    const diffuse = Math.min(0.55, 0.36 + 0.15 * (1 - Math.max(0, sinAlt)));
+    const direct = 1 - diffuse;
+    const shade = Math.max(0, Math.min(1, shade));
+    return uv * (direct * (1 - shade) + diffuse * (1 - 0.45 * shade));
+  }
 
   return { position, shadeAt, shadeGivenSun, effectiveUV };
 })();

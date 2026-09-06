@@ -515,7 +515,7 @@
     const shades = samples.map(s => Sun.shadeGivenSun(s, buildings, sun));
     loop.samples = samples.map((s, i) => ({ ...s, shade: shades[i] }));
     loop.shadePct = shades.reduce((a, b) => a + b, 0) / shades.length;
-    loop.uvEff = uv == null ? null : Sun.effectiveUV(uv, loop.shadePct);
+    loop.uvEff = uv == null ? null : Sun.effectiveUV(uv, loop.shadePct, sun.altitude);
   }
   function applySignals(loop, signals) {
     loop.signals = signals.filter(sig => Geo.pointToLineDist(sig, loop.pts) < 30).length;
