@@ -198,18 +198,19 @@ const API = (() => {
     throw lastErr || new Error('Routing request failed');
   }
 
-  // Hourly UV index + temperature (re-fetched when older than 30 min so "right now" stays fresh).
+  // Hourly UV index + temperature + humidity (re-fetched when older than 30 min).
   let uvCache = null;
   async function uvToday(lat, lon) {
     if (uvCache && Date.now() - uvCache.ts < 30 * 60 * 1000) return uvCache.data;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&hourly=uv_index,temperature_2m&timezone=auto&forecast_days=1`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&hourly=uv_index,temperature_2m,relative_humidity_2m&timezone=auto&forecast_days=1`;
     const json = await (await fetch(url)).json();
     uvCache = {
       ts: Date.now(),
       data: {
         hours: json.hourly.time.map(t => parseInt(t.slice(11, 13), 10)),
         uv: json.hourly.uv_index.map(v => v || 0),
-        temp: json.hourly.temperature_2m
+        temp: json.hourly.temperature_2m,
+        humidity: (json.hourly.relative_humidity_2m || []).map(v => v == null ? null : v)
       }
     };
     return uvCache.data;
@@ -217,7 +218,7 @@ const API = (() => {
 
   function uvAt(uvData, hourFloat) {
     const i = Geo.clamp(Math.round(hourFloat), 0, uvData.uv.length - 1);
-    return { uv: uvData.uv[i], temp: uvData.temp[i] };
+    return { uv: uvData.uv[i], temp: uvData.temp[i], humidity: uvData.humidity ? uvData.humidity[i] : null };
   }
 
   // Point elevations (metres) — batched 100 coords per request.
@@ -257,6 +258,30 @@ const API = (() => {
     throw lastErr || new Error('Routing request failed');
   }
 
-  return { bboxStr, signals, buildings, roads, pois, geocode, water, paths, indoor, route, routeVia, uvToday, uvAt, elevations,
+  // Heat-warning check. Uses observed/forecast temperature (Open-Meteo, a
+  // BOM-equivalent source) because BOM's official warnings feed requires
+  // registration and is not CORS-friendly in-browser. Returns a structured
+  // warning the recommendation engine can consume. Degrades gracefully — if
+  // weather data is unavailable it returns an inactive warning, not a throw.
+  async function heatWarning(lat, lon) {
+  try {
+    const data = await uvToday(lat, lon);
+    if (!data || !data.temp || !data.hours) return { active: false, severity: 'none', source: 'open-meteo', text: null };
+    const now = new Date().getHours();
+    let maxTemp = -Infinity;
+    for (let i = 0; i < data.temp.length; i++) {
+      if (data.hours[i] >= now && data.temp[i] != null && data.temp[i] > maxTemp) maxTemp = data.temp[i];
+    }
+    if (maxTemp === -Infinity || maxTemp == null) return { active: false, severity: 'none', source: 'open-meteo', text: null };
+    if (maxTemp >= 40) return { active: true, severity: 'extreme', source: 'open-meteo', text: 'Extreme heat — forecast peak ' + maxTemp + 'C today.' };
+    if (maxTemp >= 35) return { active: true, severity: 'high', source: 'open-meteo', text: 'Heatwave conditions — forecast peak ' + maxTemp + 'C today.' };
+    if (maxTemp >= 32) return { active: true, severity: 'moderate', source: 'open-meteo', text: 'Hot conditions — forecast peak ' + maxTemp + 'C today.' };
+    return { active: false, severity: 'none', source: 'open-meteo', text: null };
+  } catch {
+    return { active: false, severity: 'none', source: 'open-meteo', text: null, error: true };
+  }
+}
+
+  return { bboxStr, signals, buildings, roads, pois, geocode, water, paths, indoor, route, routeVia, uvToday, uvAt, elevations, heatWarning,
            TRAIL_RE: new RegExp(TRAIL_KINDS) };
 })();

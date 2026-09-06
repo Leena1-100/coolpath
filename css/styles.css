@@ -346,3 +346,82 @@ legend {
   #sheet { transition: transform 0.3s var(--ease); }
   .details-body { transition: grid-template-rows 0.35s var(--ease); }
 }
+
+/* ---------- safety recommendation ---------- */
+/* Risk is always conveyed as TEXT + color: every level pairs a color wash
+ * with a plain-language label ("High risk"). Never color alone. */
+#recommendation {
+  margin: 12px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+.rec-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  border-left: 6px solid var(--border-strong);
+}
+.rec-banner.level-low { border-left-color: var(--success); background: #f0fdf4; }
+.rec-banner.level-moderate { border-left-color: #a16207; background: #fefce8; }
+.rec-banner.level-high { border-left-color: #c2410c; background: #fff7ed; }
+.rec-banner.level-extreme { border-left-color: var(--danger); background: var(--danger-soft); }
+.rec-banner-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rec-banner-text strong { font-size: 0.95rem; }
+.rec-banner-text span { font-size: 0.8rem; color: var(--text-muted); }
+.rec-badge {
+  flex: none;
+  min-width: 64px; text-align: center;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--text);
+}
+.rec-badge.level-low { color: var(--success); border-color: var(--success); }
+.rec-badge.level-moderate { color: #a16207; border-color: #a16207; }
+.rec-badge.level-high { color: #c2410c; border-color: #c2410c; }
+.rec-badge.level-extreme { color: var(--danger); border-color: var(--danger); }
+.rec-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.rec-persona { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rec-persona label { font-size: 0.8rem; color: var(--text-muted); }
+.rec-persona select {
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: 0.85rem; color: var(--text);
+}
+.rec-factors { display: flex; flex-direction: column; gap: 6px; }
+.rec-factor { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; }
+.rec-factor .rf-name { flex: none; width: 118px; color: var(--text-muted); }
+.rec-factor .rf-bar {
+  flex: 1; height: 8px; border-radius: var(--r-full);
+  background: var(--surface-muted); border: 1px solid var(--border);
+  overflow: hidden;
+}
+.rec-factor .rf-fill { display: block; height: 100%; background: var(--primary); border-radius: var(--r-full); }
+.rec-factor .rf-val { flex: none; width: 64px; text-align: right; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.rec-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.rec-cols h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin-bottom: 6px; }
+.rec-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rec-list li { position: relative; padding-left: 16px; font-size: 0.85rem; line-height: 1.4; }
+.rec-list li::before {
+  content: ''; position: absolute; left: 2px; top: 0.5em;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--primary);
+}
+#rec-reasons li::before { background: var(--text-faint); }
+.rec-heat-note {
+  padding: 8px 10px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+@media (max-width: 480px) {
+  .rec-cols { grid-template-columns: 1fr; }
+  .rec-factor .rf-name { width: 96px; }
+}

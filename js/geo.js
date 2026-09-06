@@ -68,5 +68,18 @@ const Geo = (() => {
   const pad2 = n => String(n).padStart(2, '0');
   const fmtClock = min => pad2(Math.floor(min / 60)) + ':' + pad2(min % 60);
 
-  return { haversine, bearing, pointToSegDist, pointToLineDist, pointInPoly, clamp, fmtDist, fmtClock };
+  // Steadman-style apparent temperature (heat index): what the air "feels like"
+  // given dry-bulb temp (C) and relative humidity (%). Below ~27C it tracks the
+  // dry-bulb temp. Turns temperature + humidity into one heat-stress number.
+  function heatIndex(tempC, humidity) {
+    if (tempC == null || humidity == null) return tempC == null ? null : tempC;
+    if (tempC < 27) return tempC;
+    const t = tempC, h = humidity;
+    const hi = -8.785 + 1.611 * t + 2.339 * h - 0.146 * t * h
+      - 0.01231 * t * t - 0.01642 * h * h + 0.002212 * t * t * h
+      + 0.0007255 * t * h * h - 0.000003582 * t * t * h * h;
+    return Math.round(hi * 10) / 10;
+  }
+
+  return { haversine, bearing, pointToSegDist, pointToLineDist, pointInPoly, clamp, fmtDist, fmtClock, heatIndex };
 })();

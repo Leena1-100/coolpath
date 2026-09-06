@@ -41,7 +41,11 @@
     pinMode: 'start',
     pin: null,
     hour: null,
-    bridgeWays: []
+    bridgeWays: [],
+    /* recommendation engine inputs */
+    env: null,        // { uv, tempC, humidity, heatIndex, heatWarning, hour }
+    heatW: null,      // heatWarning() result, fetched once per search
+    persona: 'general'
   };
 
   const setStatus = (msg, isError) => {
@@ -68,6 +72,71 @@
       $('wx-chip').textContent = fmtClock(Math.round(activeHour() * 60));
     }
   }
+
+  /* ================= safety recommendation ================= */
+  // Build the engine env from the latest UV/temp/humidity + heat warning.
+  function refreshEnv(uvData) {
+    const h = activeHour();
+    let uv = null, tempC = null, humidity = null;
+    if (uvData) {
+      const at = API.uvAt(uvData, h);
+      uv = at.uv; tempC = at.temp; humidity = at.humidity;
+    }
+    state.env = Recommend.buildEnv({
+      uv, tempC, humidity,
+      heatWarning: state.heatW || { active: false, severity: 'none' },
+      hour: Math.floor(h)
+    });
+  }
+  // Assess the selected loop and paint the recommendation panel.
+  function renderRecommendation() {
+    const sec = $('recommendation');
+    const loop = state.loops[state.selected];
+    if (!sec || !state.env) return;
+    if (!loop) { sec.hidden = true; return; }
+    sec.hidden = false;
+
+    // UV may not be measured yet for this loop — degrade to ambient UV so the
+    // panel is still useful while data streams in.
+    const r = { ...loop };
+    if (r.uvEff == null && state.env.uv != null) r.uvEff = state.env.uv;
+    const a = Recommend.assess(r, state.env, { persona: state.persona });
+
+    const badge = $('rec-badge');
+    const banner = $('rec-banner');
+    banner.className = 'rec-banner level-' + a.level;
+    badge.className = 'rec-badge level-' + a.level;
+    badge.textContent = a.label.split(' ')[0].toUpperCase(); // text, never color alone
+    $('rec-label').textContent = a.label + ' — route ' + (state.selected + 1);
+    $('rec-subline').textContent =
+      `Score ${a.score}/100. ` +
+      (a.heatOverride ? 'Raised by an active heat warning. ' : '') +
+      (state.env.heatIndex != null ? `Feels like ${Math.round(state.env.heatIndex)}°C. ` : '') +
+      (state.env.uv != null ? `UV ${state.env.uv.toFixed(1)}.` : '');
+
+    $('rec-factors').innerHTML = a.factors.map(f =>
+      `<div class="rec-factor"><span class="rf-name">${f.name}</span>` +
+      `<span class="rf-bar" aria-hidden="true"><span class="rf-fill" style="width:${Math.min(100, Math.round(f.value / f.weight * 100))}%"></span></span>` +
+      `<span class="rf-val">${f.value}/${f.weight}</span></div>`).join('');
+
+    const fill = (id, items) => { $(id).innerHTML = items.map(x => `<li>${x}</li>`).join(''); };
+    fill('rec-reasons', a.reasoning);
+    fill('rec-suggestions', a.suggestions);
+
+    const note = $('rec-heat-note');
+    const w = state.env.heatWarning;
+    if (w && w.active && w.text) {
+      note.hidden = false;
+      note.textContent = 'Official heat notice: ' + w.text;
+    } else note.hidden = true;
+    void banner;
+  }
+  // Persona selector re-runs the assessment with stricter thresholds.
+  $('rec-persona-select').addEventListener('change', e => {
+    state.persona = e.target.value;
+    renderRecommendation();
+  });
+
 
   /* ================= time of day =================
    * null = follow the clock; otherwise a float hour (0–23.75) chosen by the
@@ -106,6 +175,8 @@
       state.selected = state.loops.indexOf(prev);
       renderCards();
       drawRoutes();
+      refreshEnv(liveCtx.uvData);
+      renderRecommendation();
     }
     void src;
   }
@@ -752,6 +823,7 @@
   function selectLoop(i, fit = true) {
     state.selected = i;
     drawRoutes();
+    renderRecommendation(); // risk banner follows the selected route
     if (!fit) return;
     const loop = state.loops[i];
     map.fitBounds(L.latLngBounds(loop.pts.map(p => [p.lat, p.lon])).pad(0.1));
@@ -774,7 +846,7 @@
       btn.setAttribute('aria-label',
         `Route ${i + 1}: ${loop.distKm.toFixed(1)} kilometres, about ${mins} minutes. ` +
         (measured
-          ? `${Math.round(loop.shadePct * 100)} percent shaded, UV ${loop.uvEff.toFixed(1)}. ` +
+          ? `${Math.round(loop.shadePct * 100)} percent shaded, UV ${nz(loop.uvEff, v => v.toFixed(1))}. ` +
             `${Math.round((loop.trailPct || 0) * 100)} percent on paths or trails. ` +
             `Maximum grade ${Math.round(loop.maxGrade)} percent, ${loop.climb ? Math.round(loop.climb) + ' metres of climbing, ' : ''}` +
             `${loop.signals} traffic signals, ${loop.waterCount} water stops, ${loop.benchCount} benches.` +
@@ -879,11 +951,14 @@
       state.selected = state.loops.indexOf(prev);
       renderCards();
       drawRoutes();
+      renderRecommendation(); // factors/UV change as data streams in
       return true;
     };
     try {
       const ctx = loadContext();
-      const uvData = await ctx.uvP;
+      // uvToday is safe()'d at the source, but if it rejects the whole
+      // enrichment pipeline must not die — degrade to no UV data.
+      const uvData = await ctx.uvP.catch(() => null);
       const uv = uvData ? API.uvAt(uvData, activeHour()).uv : null;
       const sun = Sun.position(activeDate(), state.start.lat, state.start.lon);
 
@@ -1010,6 +1085,12 @@
       document.querySelector('.card')?.focus();
       setStatus('Routes ready — measuring conditions…');
       loadWeather();
+      // Heat warning: fetched once per search (never throws). The
+      // recommendation refreshes when it lands.
+      state.heatW = await API.heatWarning(state.start.lat, state.start.lon);
+      const envUv = liveCtx && liveCtx.uvData ? liveCtx.uvData : await loadContext().uvP.catch(() => null);
+      refreshEnv(envUv);
+      renderRecommendation();
       enrichLoops(state.routeTarget); // background, not awaited
     } catch (err) {
       setStatus(err.message || 'Something went wrong — please try again.', true);
